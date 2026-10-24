@@ -21,7 +21,9 @@ def assert_writable(path: Path) -> None:
     path = Path(path)
     if path.name in ALLOWED_WRITES or ".quack" in path.parts:
         return
-    raise SafetyError(f"Quack refuses to write {path}: only TASKS.md, QUACK_HISTORY.md and .quack/ are writable.")
+    raise SafetyError(
+        f"Quack refuses to write {path}: only TASKS.md, QUACK_HISTORY.md and .quack/ are writable."
+    )
 
 
 def _is_generated(rel: str) -> bool:
@@ -40,7 +42,10 @@ def verify_no_source_changes(root: Path) -> tuple[bool, list[str]]:
         try:
             res = subprocess.run(
                 ["git", "-C", str(root), "status", "--porcelain"],
-                capture_output=True, text=True, timeout=30, check=True,
+                capture_output=True,
+                text=True,
+                timeout=30,
+                check=True,
             )
         except (OSError, subprocess.SubprocessError):
             pass
@@ -67,7 +72,11 @@ def verify_no_source_changes(root: Path) -> tuple[bool, list[str]]:
         if is_binary(data):
             continue
         current[p.relative_to(root).as_posix()] = sha256_bytes(data)
-    drift = [f"{rel} (modified)" for rel, h in baseline.items() if rel in current and current[rel] != h]
+    drift = [
+        f"{rel} (modified)"
+        for rel, h in baseline.items()
+        if rel in current and current[rel] != h
+    ]
     drift += [f"{rel} (deleted)" for rel in baseline if rel not in current]
     return (not drift, sorted(drift))
 

@@ -53,7 +53,6 @@ Retrieved context (compact, from their repo):
 
 Now produce your TutorResponse JSON."""
 
-# Added for providers that cannot enforce a JSON schema (OpenAI-compatible APIs).
 JSON_HINT = (
     "Respond with ONLY one JSON object with exactly these keys: "
     "socratic_question (string), explanation (string), "

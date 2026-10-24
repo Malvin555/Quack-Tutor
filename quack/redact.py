@@ -35,8 +35,6 @@ def _kv_sub(m: re.Match[str]) -> str:
     if "REDACTED" in value or value.isdigit():
         return m.group(0)
     if not quoted:
-        # Unquoted values are usually code (`token = get_token`). Only mask
-        # values that look like real secrets: long, with letters and digits.
         looks_secret = (
             len(value) >= 12
             and any(c.isdigit() for c in value)

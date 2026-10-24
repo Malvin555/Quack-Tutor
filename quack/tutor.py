@@ -20,11 +20,21 @@ from .safety import assert_writable
 from .symbols import extract_symbols
 
 __all__ = [
-    "LLMClient", "OllamaClient", "TutorError", "ask", "explain_file", "review_batch",
-    "cache_key", "cache_get", "cache_put", "parse_response", "ground", "estimate_tokens",
+    "LLMClient",
+    "OllamaClient",
+    "TutorError",
+    "ask",
+    "explain_file",
+    "review_batch",
+    "cache_key",
+    "cache_get",
+    "cache_put",
+    "parse_response",
+    "ground",
+    "estimate_tokens",
 ]
 
-OUTPUT_RESERVE = 700  # tokens kept free for the model's answer
+OUTPUT_RESERVE = 700
 
 
 def estimate_tokens(text: str) -> int:
@@ -34,7 +44,9 @@ def estimate_tokens(text: str) -> int:
 
 def _render(question: str, context: str) -> str:
     values = {"question": question, "context": context}
-    return re.sub(r"\{(question|context)\}", lambda m: values[m.group(1)], USER_TEMPLATE)
+    return re.sub(
+        r"\{(question|context)\}", lambda m: values[m.group(1)], USER_TEMPLATE
+    )
 
 
 def _fit(system: str, question: str, context: str, config: Config) -> str:
@@ -43,7 +55,9 @@ def _fit(system: str, question: str, context: str, config: Config) -> str:
     overhead = len(system) + len(_render(question, ""))
     allowed = max(400, budget_chars - overhead)
     if len(context) > allowed:
-        context = context[:allowed].rstrip() + "\n...[context trimmed to fit token budget]"
+        context = (
+            context[:allowed].rstrip() + "\n...[context trimmed to fit token budget]"
+        )
     return _render(question, context)
 
 
@@ -52,14 +66,16 @@ def parse_response(raw: str) -> TutorResponse:
     text = raw.strip()
     text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text)
     obj = None
-    for candidate in (text, text[text.find("{"): text.rfind("}") + 1]):
+    for candidate in (text, text[text.find("{") : text.rfind("}") + 1]):
         try:
             obj = json.loads(candidate)
             break
         except ValueError:
             continue
     if not isinstance(obj, dict):
-        raise TutorError("The model did not return valid JSON. Try again, or use a larger model (--model).")
+        raise TutorError(
+            "The model did not return valid JSON. Try again, or use a larger model (--model)."
+        )
     obj.setdefault("tasks", [])
     obj.setdefault("concept_tags", [])
     obj.setdefault("related_files", [])
@@ -73,7 +89,9 @@ def parse_response(raw: str) -> TutorResponse:
     try:
         return TutorResponse.model_validate(obj)
     except ValidationError as e:
-        raise TutorError(f"The model's JSON did not match the TutorResponse schema: {e.errors()[0]['loc']}") from e
+        raise TutorError(
+            f"The model's JSON did not match the TutorResponse schema: {e.errors()[0]['loc']}"
+        ) from e
 
 
 def ground(resp: TutorResponse, root: Path) -> TutorResponse:
@@ -83,7 +101,11 @@ def ground(resp: TutorResponse, root: Path) -> TutorResponse:
     def norm(f: str) -> tuple[str, int] | None:
         p = Path(f.replace("\\", "/"))
         try:
-            rel = p.resolve().relative_to(root) if p.is_absolute() else (root / p).resolve().relative_to(root)
+            rel = (
+                p.resolve().relative_to(root)
+                if p.is_absolute()
+                else (root / p).resolve().relative_to(root)
+            )
         except (ValueError, OSError):
             return None
         full = root / rel
@@ -99,15 +121,24 @@ def ground(resp: TutorResponse, root: Path) -> TutorResponse:
     for t in resp.tasks:
         hit = norm(t.file)
         if hit:
-            kept.append(t.model_copy(update={"file": hit[0], "line": min(max(1, t.line), max(1, hit[1]))}))
+            kept.append(
+                t.model_copy(
+                    update={"file": hit[0], "line": min(max(1, t.line), max(1, hit[1]))}
+                )
+            )
     related = [r for r in (norm(f) for f in resp.related_files) if r]
-    update: dict[str, object] = {"tasks": kept, "related_files": [r[0] for r in related]}
+    update: dict[str, object] = {
+        "tasks": kept,
+        "related_files": [r[0] for r in related],
+    }
     if resp.tasks and not kept:
         update["confidence"] = "low"
     return resp.model_copy(update=update)
 
 
-def _run(client: LLMClient, system: str, question: str, context: str, config: Config) -> tuple[TutorResponse, int]:
+def _run(
+    client: LLMClient, system: str, question: str, context: str, config: Config
+) -> tuple[TutorResponse, int]:
     user = _fit(system, question, redact(context), config)
     try:
         raw = client.complete(system, user)
@@ -120,7 +151,9 @@ def _run(client: LLMClient, system: str, question: str, context: str, config: Co
     return resp, tokens
 
 
-def ask(client: LLMClient, question: str, context: str, config: Config) -> tuple[TutorResponse, int]:
+def ask(
+    client: LLMClient, question: str, context: str, config: Config
+) -> tuple[TutorResponse, int]:
     """Ask the duck. Returns ``(response, tokens_used)``."""
     return _run(client, ASK_SYSTEM, question, context, config)
 
@@ -133,23 +166,31 @@ def _head_context(root: Path, path: Path, head: int, max_symbols: int) -> str:
     n = min(len(lines), head)
     body = "\n".join(f"{i:>4}| {lines[i - 1]}" for i in range(1, n + 1))
     syms = extract_symbols(Path(rel), text)[:max_symbols]
-    sym_txt = "\n".join(f"- {s.kind} {s.name} L{s.start_line}-{s.end_line}: {s.signature}" for s in syms)
+    sym_txt = "\n".join(
+        f"- {s.kind} {s.name} L{s.start_line}-{s.end_line}: {s.signature}" for s in syms
+    )
     return f"### FILE: {rel} (lines 1-{n})\n{body}\n### SYMBOLS in {rel}\n{sym_txt}\n"
 
 
-def explain_file(client: LLMClient, root: Path, path: Path, config: Config) -> tuple[TutorResponse, int]:
+def explain_file(
+    client: LLMClient, root: Path, path: Path, config: Config
+) -> tuple[TutorResponse, int]:
     head = {1: 15, 2: 30, 3: 60}.get(config.depth, 30)
     ctx = _head_context(Path(root), Path(path), head, 60)
     return _run(client, EXPLAIN_SYSTEM, f"Explain {Path(path).as_posix()}", ctx, config)
 
 
-def review_batch(client: LLMClient, root: Path, paths: list[Path], config: Config) -> tuple[TutorResponse, int]:
+def review_batch(
+    client: LLMClient, root: Path, paths: list[Path], config: Config
+) -> tuple[TutorResponse, int]:
     ctx = "\n".join(_head_context(Path(root), Path(p), 60, 25) for p in paths)
     names = ", ".join(Path(p).as_posix() for p in paths)
     return _run(client, REVIEW_SYSTEM, f"Review these files: {names}", ctx, config)
 
 
-def cache_key(question: str, depth: int, file_hashes: list[str], model: str = "") -> str:
+def cache_key(
+    question: str, depth: int, file_hashes: list[str], model: str = ""
+) -> str:
     raw = f"{question}|{depth}|{','.join(sorted(file_hashes))}|{model}"
     return hashlib.sha256(raw.encode()).hexdigest()
 
@@ -159,7 +200,9 @@ def cache_get(key: str, cache_dir: Path, ttl: int) -> TutorResponse | None:
     try:
         if time.time() - path.stat().st_mtime > ttl:
             return None
-        return TutorResponse.model_validate(json.loads(path.read_text(encoding="utf-8"))["response"])
+        return TutorResponse.model_validate(
+            json.loads(path.read_text(encoding="utf-8"))["response"]
+        )
     except (OSError, ValueError, KeyError, ValidationError):
         return None
 
@@ -168,5 +211,8 @@ def cache_put(key: str, response: TutorResponse, tokens: int, cache_dir: Path) -
     path = Path(cache_dir) / f"{key}.json"
     assert_writable(path)
     path.write_text(
-        json.dumps({"response": response.model_dump(), "tokens": tokens, "ts": time.time()}), encoding="utf-8"
+        json.dumps(
+            {"response": response.model_dump(), "tokens": tokens, "ts": time.time()}
+        ),
+        encoding="utf-8",
     )

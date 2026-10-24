@@ -5,7 +5,7 @@ WORK="$(mktemp -d)"
 cp -r tests/fixtures/mini_repo/. "$WORK"
 Q="why does session_valid reject valid sessions?"
 quack -C "$WORK" ask "$Q" "$@"
-quack -C "$WORK" ask "$Q" "$@"            # second run should say: cached, 0 tokens
+quack -C "$WORK" ask "$Q" "$@"
 quack -C "$WORK" explain auth.py "$@" || true
 quack -C "$WORK" verify
 quack -C "$WORK" history > /dev/null

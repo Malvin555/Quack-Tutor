@@ -14,11 +14,11 @@ from typing import Any, Iterator
 
 from .models import TutorResponse
 
+
 def _duck(eye: str, extra: str = "") -> list[str]:
     return ["    __", f"___( {eye})>{extra}", "\\ <_. )", " `---'"]
 
 
-# Original mascot, one face per mood.
 MOODS: dict[str, list[str]] = {
     "idle": _duck("o"),
     "happy": _duck("^"),
@@ -26,12 +26,12 @@ MOODS: dict[str, list[str]] = {
     "worried": _duck("°", "  ?"),
     "no": _duck("x", "  !"),
 }
-DUCK = "\n".join(MOODS["idle"])  # kept for callers that want the plain art
+DUCK = "\n".join(MOODS["idle"])
 
 TIPS = [
     "I never edit your files. Not even if you ask nicely.",
     "Indexing costs 0 tokens. I counted.",
-    "Pipe the traceback:  pytest -x 2>&1 | quack ask \"why?\" --stdin",
+    'Pipe the traceback:  pytest -x 2>&1 | quack ask "why?" --stdin',
     "Ask the same question twice. The second answer is free.",
     "One question at a time. I'm a duck.",
     "quack verify proves I kept my wings to myself.",
@@ -45,29 +45,40 @@ REMARKS = {
 TAGLINE = "the rubber duck that can't touch your code"
 BADGES = "read-only  ·  token-frugal  ·  local-first"
 
-# (panel, [(command, description)])
 GROUPS: list[tuple[str, list[tuple[str, str]]]] = [
-    ("Ask the duck", [
-        ("ask \"...\"", "explain a bug, write TASKS.md  (--stdin to pipe an error)"),
-        ("chat", "talk it through with follow-ups"),
-        ("compare \"...\" -w A -w B", "same question to several models, side by side"),
-        ("explain FILE", "what does this file do  (--no-llm: no model needed)"),
-        ("review", "batch review of the riskiest files"),
-    ]),
-    ("Track", [
-        ("tasks", "your to-do list"),
-        ("history", "what you've been asking, and mini-lessons"),
-        ("verify", "prove no source file changed  (--audit lists write sites)"),
-        ("export", "readable session log"),
-    ]),
-    ("Set up", [
-        ("doctor", "check Ollama, model, keys, index"),
-        ("init", "choose a provider and model"),
-        ("providers", "list supported AI providers"),
-        ("config", "show / get / set settings"),
-        ("index", "build the index (0 tokens)"),
-        ("cache", "inspect or clear cached answers"),
-    ]),
+    (
+        "Ask the duck",
+        [
+            ('ask "..."', "explain a bug, write TASKS.md  (--stdin to pipe an error)"),
+            ("chat", "talk it through with follow-ups"),
+            (
+                'compare "..." -w A -w B',
+                "same question to several models, side by side",
+            ),
+            ("explain FILE", "what does this file do  (--no-llm: no model needed)"),
+            ("review", "batch review of the riskiest files"),
+        ],
+    ),
+    (
+        "Track",
+        [
+            ("tasks", "your to-do list"),
+            ("history", "what you've been asking, and mini-lessons"),
+            ("verify", "prove no source file changed  (--audit lists write sites)"),
+            ("export", "readable session log"),
+        ],
+    ),
+    (
+        "Set up",
+        [
+            ("doctor", "check Ollama, model, keys, index"),
+            ("init", "choose a provider and model"),
+            ("providers", "list supported AI providers"),
+            ("config", "show / get / set settings"),
+            ("index", "build the index (0 tokens)"),
+            ("cache", "inspect or clear cached answers"),
+        ],
+    ),
 ]
 
 
@@ -99,7 +110,10 @@ def banner(version: str, extra: str = "") -> None:
     side = [f"Quack v{version}", TAGLINE, BADGES, extra]
     for i, line in enumerate(duck):
         t = Text(line.ljust(10), style="bold yellow")
-        t.append(side[i] if i < len(side) else "", style=["bold", "", "dim", "cyan"][i] if i < 4 else "")
+        t.append(
+            side[i] if i < len(side) else "",
+            style=["bold", "", "dim", "cyan"][i] if i < 4 else "",
+        )
         con.print(t)
     con.print()
 
@@ -111,13 +125,22 @@ def cheatsheet() -> None:
 
         con = console()
         for title, rows in GROUPS:
-            t = Table(show_header=False, box=None, padding=(0, 2), title=title, title_style="bold cyan", title_justify="left")
+            t = Table(
+                show_header=False,
+                box=None,
+                padding=(0, 2),
+                title=title,
+                title_style="bold cyan",
+                title_justify="left",
+            )
             t.add_column(style="bold green", no_wrap=True, min_width=36)
             t.add_column()
             for cmd, desc in rows:
                 t.add_row(f"quack {cmd}", desc)
             con.print(t)
-        con.print("\n[dim]First time? Run [bold]quack doctor[/bold]. Full help: [bold]quack --help[/bold][/dim]")
+        con.print(
+            "\n[dim]First time? Run [bold]quack doctor[/bold]. Full help: [bold]quack --help[/bold][/dim]"
+        )
         return
     print("Quack: the rubber duck that can't touch your code\n")
     for title, rows in GROUPS:
@@ -147,18 +170,42 @@ def show_response(resp: TutorResponse, tokens: int, cached: bool, label: str) ->
     from rich.text import Text
 
     con = console()
-    con.print(Panel(Text(resp.socratic_question, style="bold yellow"), title="🦆 Quack asks", title_align="left",
-                    border_style="yellow", padding=(1, 2)))
-    con.print(Panel(resp.explanation, title="Likely cause", title_align="left", border_style="blue", padding=(1, 2)))
+    con.print(
+        Panel(
+            Text(resp.socratic_question, style="bold yellow"),
+            title="🦆 Quack asks",
+            title_align="left",
+            border_style="yellow",
+            padding=(1, 2),
+        )
+    )
+    con.print(
+        Panel(
+            resp.explanation,
+            title="Likely cause",
+            title_align="left",
+            border_style="blue",
+            padding=(1, 2),
+        )
+    )
     if resp.tasks:
-        t = Table(title="Your tasks (the duck never edits your code)", title_style="bold green", title_justify="left",
-                  header_style="bold", expand=True)
+        t = Table(
+            title="Your tasks (the duck never edits your code)",
+            title_style="bold green",
+            title_justify="left",
+            header_style="bold",
+            expand=True,
+        )
         t.add_column("", no_wrap=True)
         t.add_column("where", style="cyan", no_wrap=True)
         t.add_column("do this")
         t.add_column("why", style="dim")
         for task in resp.tasks:
-            sev = "[bold red]critical[/]" if task.severity == "critical" else "[yellow]suggest[/]"
+            sev = (
+                "[bold red]critical[/]"
+                if task.severity == "critical"
+                else "[yellow]suggest[/]"
+            )
             t.add_row(sev, f"{task.file}:{task.line}", task.description, task.why)
         con.print(t)
     else:
@@ -168,8 +215,10 @@ def show_response(resp: TutorResponse, tokens: int, cached: bool, label: str) ->
     tags = ", ".join(resp.concept_tags) or "-"
     mood, remark = REMARKS[resp.confidence]
     duck_says(mood, remark)
-    con.print(f"[dim]concepts: {tags}  |  confidence: [/dim][{conf}]{resp.confidence}[/{conf}]"
-              f"[dim]  |  {cost}  |  {label}[/dim]")
+    con.print(
+        f"[dim]concepts: {tags}  |  confidence: [/dim][{conf}]{resp.confidence}[/{conf}]"
+        f"[dim]  |  {cost}  |  {label}[/dim]"
+    )
     return True
 
 

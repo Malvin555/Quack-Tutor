@@ -1,7 +1,6 @@
 """Optional tracing: a local JSONL log, plus Sentry spans if explicitly enabled.
 
-Off by default. Only tokens, latency, provider and model are recorded; never
-prompts, code or answers. Sentry requires ``sentry = true`` in config, the
+Sentry requires ``sentry = true`` in config, the
 ``sentry-sdk`` package and a ``SENTRY_DSN`` environment variable.
 """
 
@@ -28,7 +27,9 @@ def _sentry(config: Config) -> Any | None:
     except ImportError:
         return None
     if not _sentry_ready:
-        sentry_sdk.init(dsn=os.environ["SENTRY_DSN"], traces_sample_rate=1.0, send_default_pii=False)
+        sentry_sdk.init(
+            dsn=os.environ["SENTRY_DSN"], traces_sample_rate=1.0, send_default_pii=False
+        )
         _sentry_ready = True
     return sentry_sdk
 

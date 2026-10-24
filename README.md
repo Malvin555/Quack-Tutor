@@ -1,93 +1,180 @@
-# Quack-Hopper
+# 🦆 Quack, the rubber duck tutor
 
+**The AI coding assistant that can't touch your code.**
 
+Quack indexes your repo (zero LLM tokens), retrieves only the few files that matter, asks you
+**one Socratic question**, explains the likely cause of a bug, and writes a `TASKS.md` for *you* to
+fix. It never edits source files. It is read-only by construction and can prove it (`quack verify`).
 
-## Getting started
+Built for the Hacktoberfest "Slow and Steady" challenge: the duck conserves tokens, moves
+deliberately, and lets you do the fix at your own pace.
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+## Why open models
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+- **Private by default.** Local Gemma 3 via Ollama means zero cloud egress: pre-launch code,
+  customer fixtures and internal TODOs stay on the laptop.
+- **Free forever, works offline** after `ollama pull gemma3:4b`.
+- **Swappable.** Change the model, or opt in to OpenRouter, Groq, Gemini and other
+  OpenAI-compatible APIs when you want a bigger brain (see Providers).
 
-## Add your files
+## Install
 
-* [Create](https://docs.gitlab.com/user/project/repository/web_editor/#create-a-file) or [upload](https://docs.gitlab.com/user/project/repository/web_editor/#upload-a-file) files
-* [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+```bash
+pip install -e .            # or: pip install -e ".[rich,git,sentry,dev]"
+ollama pull gemma3:4b       # local model (default)
+quack doctor                # checks Ollama, model, keys, index
+```
+
+## Using a `.env` file for API keys
+
+Local Ollama needs no keys. For a remote provider, copy the template and fill in only what you use:
+
+```bash
+cp .env.example .env        # or .quack/.env, or ~/.config/quack/.env
+$EDITOR .env                # OPENROUTER_API_KEY=sk-or-...
+quack init --provider openrouter --fallback ollama
+quack doctor                # shows which .env files were loaded and whether the key is set
+```
+
+- Load order: real environment variables win, then `.quack/.env`, `.env`, `~/.config/quack/.env`.
+- `.env` files, `*.pem`/`*.key` and SSH keys are **never indexed**, so they can't reach a model.
+- A key alone sends nothing anywhere: remote providers stay blocked until `quack init` or `--remote`.
+- You can also set `QUACK_PROVIDER`, `QUACK_MODEL`, `QUACK_BASE_URL` in `.env`.
+- Keep `.env` out of git (this repo's `.gitignore` already does; add it to your own projects).
+
+## First run
+
+```bash
+cd your-project
+quack ask "why does session_valid reject valid sessions?"
+quack verify                # PASS: no source files were modified
+quack tasks                 # your to-do list
+```
+
+Pipe a failing test or traceback straight in. Files named in the traceback are pinned into the context:
+
+```bash
+pytest -x 2>&1 | quack ask "why does this fail?" --stdin
+```
+
+## Commands
+
+| Command | What it does |
+|---|---|
+| `quack index [--since REV] [--changed]` | Build/update `.quack/index.db`. 0 LLM tokens. |
+| `quack ask "..." [--depth 1\|2\|3] [--dry-run] [--no-cache] [--model M] [--provider P] [--stdin] [--json]` | Ask the duck. Writes `TASKS.md`. |
+| `quack explain FILE [--no-llm]` | Explain one file from its signatures. |
+| `quack review [--since REV] [--max-files N] [--batch-size N] [--dry-run]` | Batch review; severity-ranked tasks. |
+| `quack tasks` | Print `TASKS.md`. |
+| `quack history` | Regenerate `QUACK_HISTORY.md` (weekly growth, mini-lessons). |
+| `quack verify [--audit]` | Prove no source changed; `--audit` lists every write site. |
+| `quack chat` | Interactive follow-ups. Slash commands: `/help /files /tasks /depth /model /verify /clear /quit`. |
+| `quack compare "..." -w ollama -w openrouter:MODEL` | Same question to several models side by side (confidence, tokens, latency, where each points). Writes no tasks. |
+| `quack init` | Pick a provider/model; writes `.quack/config.toml`. |
+| `quack providers` | List providers and which are ready. |
+| `quack doctor` | Check Ollama, model, API keys, index. |
+| `quack config show\|get\|set` | Inspect or change settings. |
+| `quack export [-o -]` | Readable session log (default `.quack/session.log`). |
+| `quack cache stats\|clear` | Inspect the 24h answer cache. |
+
+Global: `-C/--root PATH` to work on another repo. Everything works without a model except
+`ask`, `explain` (without `--no-llm`) and `review`; `index`, `tasks`, `history`, `verify`,
+`explain --no-llm`, `doctor`, `providers` and `config` run fully offline.
+
+## Providers
+
+The default is local Ollama. Remote providers are **opt-in**: Quack refuses to contact any
+non-local host until you allow it with `quack init --provider NAME` (or `--remote` for one run).
+Only redacted, compact context is sent, and Quack prints a notice before it does.
+
+```bash
+export OPENROUTER_API_KEY=...                       # keys live in your env, never in config
+quack init --provider openrouter --model google/gemma-3-27b-it --fallback ollama
+quack ask "why is login slow?"                      # falls back to local Ollama if OpenRouter fails
+quack ask "..." --provider groq --remote            # one-off
+```
+
+Built in: `ollama`, `lmstudio`, `llamacpp` (local); `openrouter`, `anthropic` (native Messages API),
+`openai`, `groq`, `together`, `mistral`, `deepseek`, `gemini`, `cerebras`, `fireworks`, `huggingface`,
+`xai` (remote); and `custom` for any OpenAI-compatible endpoint:
+
+```bash
+quack init --provider custom --base-url https://my-host/v1 --api-key-env MY_KEY --model my-model
+```
+
+Default model names are suggestions and provider catalogs change; override with `--model`.
+A self-hosted open-weight model on a GPU server (for example a DigitalOcean GPU Droplet running
+Ollama or vLLM) works through `custom`, or through `ollama` with `quack init --provider ollama
+--base-url http://HOST:11434` (counts as remote, so it needs the opt-in).
+
+## Interface
+
+On a real terminal Quack draws an ASCII duck banner, grouped help (`quack` on its own shows the
+cheat sheet), panels for the question/cause, a coloured task table and a spinner while the model thinks.
+When output is piped, or with `--json` / `QUACK_PLAIN=1`, it prints plain text with no colour codes.
 
 ```
-cd existing_repo
-git remote add origin https://gitlab.com/Malvin555/quack-hopper.git
-git branch -M main
-git push -uf origin main
+    __    Quack v1.0.0
+___( o)>  the rubber duck that can't touch your code
+\ <_. )   read-only  ·  token-frugal  ·  local-first
+ `---'
 ```
 
-## Integrate with your tools
+## Token budget
 
-* [Set up project integrations](https://gitlab.com/Malvin555/quack-hopper/-/settings/integrations)
+Targets from the spec (`--depth` controls it; context is hard-trimmed to fit `max_tokens_per_ask`, default 5000):
 
-## Collaborate with your team
+| Operation | Target tokens |
+|---|---|
+| `index` | 0 |
+| `ask` depth 1 / 2 / 3 | ~1000-1500 / ~2000-3000 / ~4000-5000 |
+| `explain` | ~1000-2000 |
+| `review` per file | ~800-1200 |
+| cached `ask` | 0 |
 
-* [Invite team members and collaborators](https://docs.gitlab.com/user/project/members/)
-* [Create a new merge request](https://docs.gitlab.com/user/project/merge_requests/creating_merge_requests/)
-* [Automatically close issues from merge requests](https://docs.gitlab.com/user/project/issues/managing_issues/#closing-issues-automatically)
-* [Enable merge request approvals](https://docs.gitlab.com/user/project/merge_requests/approvals/)
-* [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+These are design targets. Measure your own with `quack ask ... --json` (provider-reported usage,
+estimated at ~4 chars/token when a provider reports none).
 
-## Test and Deploy
+## Privacy and safety guarantees
 
-Use the built-in continuous integration in GitLab.
+- Writes only `TASKS.md`, `QUACK_HISTORY.md` and `.quack/`. Every write goes through `assert_writable`;
+  `quack verify --audit` lists all write sites.
+- The only network destination by default is `localhost:11434`. Remote hosts are blocked until opted in.
+- Secrets (API keys, GitHub/Slack/AWS tokens, private keys) are redacted before indexing and before any
+  text reaches a model.
+- Model answers are grounded: tasks pointing at files that don't exist are dropped.
+- No telemetry. Optional tracing is off by default (below).
 
-* [Get started with GitLab CI/CD](https://docs.gitlab.com/ci/quick_start/)
-* [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/user/application_security/sast/)
-* [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/topics/autodevops/requirements/)
-* [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/user/clusters/agent/)
-* [Set up protected environments](https://docs.gitlab.com/ci/environments/protected_environments/)
+## Sponsor and partner hooks
 
-***
+| Partner | How it fits | Status |
+|---|---|---|
+| **Gemma** | Default model is `gemma3:4b` via Ollama; `google/gemma-3-27b-it` on OpenRouter. | Built in |
+| **Entire** | `quack export` writes a readable session log (provider, tokens, latency, answers) to share in your post. | Built in |
+| **Sentry** | Opt-in spans with tokens/latency/provider only (never code or prompts): `pip install ".[sentry]"`, `quack config set sentry true`, set `SENTRY_DSN`. `quack config set trace true` writes a local `.quack/trace.jsonl` instead. | Built in, untested against a live Sentry project |
+| **GitHub** | `.github/workflows/ci.yml` runs the offline test suite; `quack review --since origin/main --json` suits PR checks. | Built in |
+| **DigitalOcean / Backboard / other hosts** | Any OpenAI-compatible endpoint works via `custom`. Check each vendor's docs for their base URL and key. | Config only, untested |
+| **.tech domain** | A landing page would live outside this codebase. | Not in code |
 
-# Editing this README
+## What I'd do next
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+Tree-sitter symbol extraction, embeddings for retrieval, a Temporal-style resumable `review`,
+and a fine-tuned tutor voice. All out of scope for v1 (regex + BM25 only).
 
-## Suggestions for a good README
+## Mascot and landing page
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+The duck is an original character. In the terminal it changes face with the model's confidence
+(`quack duck` shows them all). The `web/` folder is an Astro landing page for the CLI; see `web/README.md`.
 
-## Name
-Choose a self-explaining name for your project.
+## Project files
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+`pyproject.toml`, `requirements.txt`, `.env.example`, `LICENSE` (MIT), `CONTRIBUTING.md`, `Makefile`,
+`BUILD_SPEC.json` (the original build spec), `scripts/make_demo.sh` (captures real `demo/` files),
+`POST.md` (DEV post draft), `.github/workflows/ci.yml`.
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+## Development
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
-
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
-
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
-
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
-
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
-
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
-
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
-
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
-
-## License
-For open source projects, say how it is licensed.
-
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+```bash
+pip install -e ".[dev]"
+pytest -q      
+```

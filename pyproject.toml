@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "quack-tutor"
+version = "1.0.0"
+description = "A read-only, token-frugal CLI rubber duck tutor. The AI coding assistant that can't touch your code."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+    "ollama>=0.4.0",
+    "pydantic>=2.0",
+    "typer>=0.12",
+    "tomli>=2.0; python_version < '3.11'",
+]
+
+[project.optional-dependencies]
+rich = ["rich>=13.0"]
+git = ["gitpython>=3.1"]
+sentry = ["sentry-sdk>=2.0"]
+dev = ["pytest>=8.0"]
+all = ["rich>=13.0", "gitpython>=3.1", "sentry-sdk>=2.0"]
+
+[project.scripts]
+quack = "quack.cli:app"
+
+[tool.setuptools.packages.find]
+include = ["quack*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

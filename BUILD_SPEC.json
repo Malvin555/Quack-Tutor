@@ -1,0 +1,495 @@
+{
+  "meta": {
+    "name": "Quack — The Rubber Duck Tutor",
+    "version": "1.0.0",
+    "format": "build-spec",
+    "instructions_for_ai": "You are a senior Python engineer. Build the project described here exactly. Follow the file tree, schemas, module specs, and acceptance criteria. Do not add features not specified. Do not create a web UI, HTTP server, or frontend. Build in the order listed in build_order. After each phase, run the acceptance check for that phase. If a dependency is unavailable, degrade gracefully as specified. Output production-quality code with type hints, docstrings, and unit tests where specified.",
+    "target_runtime": "Python 3.10+",
+    "os": "linux, macos, windows",
+    "language": "english",
+    "scope": "CLI application only"
+  },
+
+  "project": {
+    "one_liner": "A read-only, token-frugal CLI tutor that knows your repo, asks one Socratic question, explains the cause of a bug, and writes a TASKS.md for you to fix — never modifying source files.",
+    "tagline": "The AI coding assistant that can't touch your code.",
+    "why_open_source": "Repo data (pre-launch code, secrets, customer fixtures, internal TODOs) must stay on the laptop. Local Gemma 3 via Ollama means zero cloud egress. Open weights let the user swap the tutor's voice. $0 to run forever.",
+    "theme_fit": "Slow and Steady — the duck conserves energy (tokens), moves deliberately (reads only what matters), and lets the human do the fix at their own pace."
+  },
+
+  "hard_constraints": [
+    "NEVER write to source files. Only write to: TASKS.md, QUACK_HISTORY.md, and anything under .quack/.",
+    "NEVER make network requests except to http://localhost:11434 (Ollama).",
+    "Indexing MUST cost 0 LLM tokens (pure filesystem + regex).",
+    "A typical `quack ask` MUST stay under 5000 LLM tokens.",
+    "Tool MUST work offline after `ollama pull gemma3:4b`.",
+    "Tool MUST degrade gracefully if Ollama is not running: `index`, `tasks`, `history`, `verify`, `explain --no-llm` still work.",
+    "No web UI, no HTTP server, no frontend, no browser automation. CLI only."
+  ],
+
+  "tech_stack": {
+    "required_pip": ["ollama>=0.4.0", "pydantic>=2.0", "typer>=0.12"],
+    "optional_pip": {
+      "gitpython>=3.1": "git-aware indexing; fallback to mtime if absent",
+      "rich>=13.0": "prettier terminal output; fallback to plain print if absent"
+    },
+    "stdlib_only_for": [
+      "sqlite3 (index and history databases)",
+      "hashlib (file hashing and cache keys)",
+      "re (symbol extraction and redaction)",
+      "pathlib (filesystem)",
+      "json (config, cache)"
+    ],
+    "no_embeddings": "BM25 only in v1. No sentence-transformers, no vector DB.",
+    "no_tree_sitter": "Regex-based symbol extraction in v1. Document as next step.",
+    "llm": {
+      "provider": "ollama",
+      "model": "gemma3:4b",
+      "endpoint": "http://localhost:11434",
+      "structured_output": "use format=TutorResponse.model_json_schema()",
+      "temperature": 0.2,
+      "stream": false
+    }
+  },
+
+  "file_tree": [
+    "pyproject.toml",
+    "README.md",
+    "BUILD_SPEC.json",
+    ".gitignore",
+    "quack/__init__.py",
+    "quack/__main__.py",
+    "quack/cli.py",
+    "quack/config.py",
+    "quack/models.py",
+    "quack/symbols.py",
+    "quack/indexer.py",
+    "quack/retriever.py",
+    "quack/context.py",
+    "quack/prompts.py",
+    "quack/tutor.py",
+    "quack/tasks.py",
+    "quack/history.py",
+    "quack/safety.py",
+    "quack/redact.py",
+    "tests/__init__.py",
+    "tests/test_symbols.py",
+    "tests/test_retriever.py",
+    "tests/test_tasks.py",
+    "tests/test_safety.py",
+    "tests/test_redact.py",
+    "tests/fixtures/mini_repo/README.md",
+    "tests/fixtures/mini_repo/auth.py",
+    "tests/fixtures/mini_repo/api.py",
+    "demo/.gitkeep"
+  ],
+
+  "pydantic_schemas": {
+    "Symbol": {
+      "file": "str",
+      "name": "str",
+      "kind": "Literal['function','class','variable']",
+      "start_line": "int",
+      "end_line": "int",
+      "signature": "str"
+    },
+    "FileRecord": {
+      "path": "str",
+      "language": "str",
+      "line_count": "int",
+      "hash": "str",
+      "score": "float = 0.0"
+    },
+    "Task": {
+      "file": "str",
+      "line": "int",
+      "severity": "Literal['critical','suggestion']",
+      "description": "str",
+      "why": "str"
+    },
+    "TutorResponse": {
+      "socratic_question": "str",
+      "explanation": "str",
+      "tasks": "list[Task]",
+      "concept_tags": "list[str]",
+      "confidence": "Literal['high','medium','low']",
+      "related_files": "list[str] = []"
+    },
+    "IndexStats": {
+      "files": "int",
+      "symbols": "int",
+      "mentions": "int",
+      "todos": "int",
+      "duration_ms": "int"
+    }
+  },
+
+  "sqlite_schema": {
+    "index_db": {
+      "path": ".quack/index.db",
+      "ddl": [
+        "CREATE TABLE IF NOT EXISTS files (path TEXT PRIMARY KEY, language TEXT NOT NULL, line_count INTEGER NOT NULL, hash TEXT NOT NULL, mtime REAL NOT NULL);",
+        "CREATE TABLE IF NOT EXISTS symbols (id INTEGER PRIMARY KEY AUTOINCREMENT, file TEXT NOT NULL, name TEXT NOT NULL, kind TEXT NOT NULL, start_line INTEGER NOT NULL, end_line INTEGER NOT NULL, signature TEXT NOT NULL);",
+        "CREATE INDEX IF NOT EXISTS idx_symbols_file ON symbols(file);",
+        "CREATE INDEX IF NOT EXISTS idx_symbols_name ON symbols(name);",
+        "CREATE TABLE IF NOT EXISTS mentions (file TEXT NOT NULL, term TEXT NOT NULL, count INTEGER NOT NULL, PRIMARY KEY(file, term));",
+        "CREATE INDEX IF NOT EXISTS idx_mentions_term ON mentions(term);",
+        "CREATE TABLE IF NOT EXISTS todos (id INTEGER PRIMARY KEY AUTOINCREMENT, file TEXT NOT NULL, line INTEGER NOT NULL, text TEXT NOT NULL);"
+      ]
+    },
+    "history_db": {
+      "path": ".quack/history.db",
+      "ddl": [
+        "CREATE TABLE IF NOT EXISTS queries (id INTEGER PRIMARY KEY AUTOINCREMENT, ts REAL NOT NULL, question TEXT NOT NULL, files TEXT NOT NULL, tokens INTEGER NOT NULL, task_ids TEXT NOT NULL);",
+        "CREATE TABLE IF NOT EXISTS concepts (id INTEGER PRIMARY KEY AUTOINCREMENT, ts REAL NOT NULL, tag TEXT NOT NULL);",
+        "CREATE TABLE IF NOT EXISTS completed (task_id TEXT PRIMARY KEY, completed_at REAL NOT NULL);"
+      ]
+    }
+  },
+
+  "modules": [
+    {
+      "file": "quack/models.py",
+      "purpose": "Pydantic schemas only. No logic.",
+      "public_api": [
+        "Symbol",
+        "FileRecord",
+        "Task",
+        "TutorResponse",
+        "IndexStats"
+      ],
+      "behavior": "Define the classes exactly as in pydantic_schemas. Use from __future__ import annotations. Add docstrings.",
+      "tests": "none (covered indirectly)"
+    },
+    {
+      "file": "quack/config.py",
+      "purpose": "Central config: paths, model name, defaults.",
+      "public_api": ["Config dataclass", "load_config(root: Path) -> Config"],
+      "behavior": "Config fields: root (repo path), quack_dir (root/.quack), index_db_path, history_db_path, cache_dir, tasks_md_path, history_md_path, model (default 'gemma3:4b'), depth (default 2), k_files (default 3), max_tokens_per_ask (default 5000), cache_ttl_seconds (default 86400), batch_size (default 3), max_review_files (default 30). load_config creates .quack/ and .quack/cache/ if missing. Read optional .quack/config.toml to override defaults (tomllib in 3.11+, tomli fallback).",
+      "tests": "none (trivial)"
+    },
+    {
+      "file": "quack/redact.py",
+      "purpose": "Mask secrets in text before indexing or sending to the model.",
+      "public_api": ["redact(text: str) -> str"],
+      "behavior": "Apply regex patterns: (1) key=value where key contains api_key|secret|token|password, (2) sk-[A-Za-z0-9]{20,}, (3) ghp_[A-Za-z0-9]{36}, (4) xox[baprs]-[A-Za-z0-9-]+, (5) -----BEGIN [A-Z ]*PRIVATE KEY-----...-----END [A-Z ]*PRIVATE KEY-----, (6) AKIA[0-9A-Z]{16}. Replace with ***REDACTED_<TYPE>***. Pure function, no side effects.",
+      "tests": "tests/test_redact.py — one test per pattern, plus a no-op test"
+    },
+    {
+      "file": "quack/safety.py",
+      "purpose": "Enforce the read-only allowlist and run `quack verify`.",
+      "public_api": [
+        "ALLOWED_WRITES: frozenset[str]",
+        "assert_writable(path: Path) -> None",
+        "verify_no_source_changes(root: Path) -> tuple[bool, list[str]]",
+        "audit_write_sites(package_root: Path) -> list[str]"
+      ],
+      "behavior": "ALLOWED_WRITES = {'TASKS.md','QUACK_HISTORY.md'}. assert_writable(path): if path.name in ALLOWED_WRITES or '.quack' in path.parts -> ok, else raise SafetyError. verify_no_source_changes: if .git exists, run `git status --porcelain` and return (clean, changed_paths); else compare file hashes recorded at last index time (store in .quack/last_hash.json) and return any drift. audit_write_sites: grep the package source for open(..., 'w'|'a') and Path.write_text/write_bytes, return the call sites (for `quack verify --audit`). Define SafetyError(Exception).",
+      "tests": "tests/test_safety.py — assert_writable rejects a src file, accepts TASKS.md, accepts .quack/index.db; verify returns clean on an untouched fixture"
+    },
+    {
+      "file": "quack/symbols.py",
+      "purpose": "Regex-based symbol extraction. Pure functions, no I/O.",
+      "public_api": [
+        "detect_language(path: Path) -> str",
+        "extract_symbols(path: Path, text: str) -> list[Symbol]",
+        "extract_mentions(text: str) -> dict[str, int]",
+        "extract_todos(text: str) -> list[tuple[int, str]]"
+      ],
+      "behavior": "detect_language by extension: .py->python, .js/.jsx/.ts/.tsx->javascript, .go->go, .rs->rust, .java->java, .rb->ruby, else 'other'. extract_symbols per language using the regex patterns in symbol_patterns. For each match compute start_line and end_line: end_line is the line before the next top-level def/class at the same indent, or EOF. signature is the matched line stripped. extract_mentions: lowercase, split on non-alphanumeric+underscore, drop tokens <3 chars and stopwords (a,an,the,is,are,was,were,be,been,to,of,in,on,for,and,or,not,it,this,that,with,as,if,else,return,def,class,function,var,let,const,new). Return Counter as dict. extract_todos: lines matching (?i)(TODO|FIXME|XXX|HACK)\\b, return (line_number, stripped_line).",
+      "tests": "tests/test_symbols.py — extract from fixtures/mini_repo/auth.py, assert >=2 symbols with correct start_line; mentions exclude stopwords; todos found"
+    },
+    {
+      "file": "quack/indexer.py",
+      "purpose": "Walk the repo and build .quack/index.db. Zero LLM tokens.",
+      "public_api": [
+        "index_repo(root: Path, config: Config, since: str | None = None, changed_only: bool = False) -> IndexStats"
+      ],
+      "behavior": "Walk root, skip dirs: .git, node_modules, venv, .venv, __pycache__, dist, build, .quack, .tox, target. Skip files >500KB. Skip binary extensions (.png,.jpg,.pdf,.zip,.lock,.min.js). For each file: compute sha256 hash, line_count, mtime, language; call symbols.extract_symbols, extract_mentions, extract_todos on redact(text). Upsert into SQLite (DELETE existing rows for that file, then INSERT). If since is given and gitpython is available, only reindex files changed since that rev; if not available, print a warning and do a full index. If changed_only, only reindex files whose hash differs from the DB. Record the set of file hashes into .quack/last_hash.json at the end (for safety.verify). Return IndexStats. Print a progress line per 100 files.",
+      "tests": "covered by integration: index tests/fixtures/mini_repo, assert files/symbols/mentions/todos counts > 0"
+    },
+    {
+      "file": "quack/retriever.py",
+      "purpose": "BM25 + symbol-name bonus. Pure function over the index.",
+      "public_api": [
+        "rank(query: str, db_path: Path, k: int = 3) -> list[FileRecord]"
+      ],
+      "behavior": "Tokenize the query the same way as extract_mentions. Load the index. For each file compute BM25 over the mentions table: idf(term) = log((N - df + 0.5)/(df + 0.5) + 1); score += idf * (f*(k1+1))/(f + k1*(1 - b + b*dl/avgdl)) with k1=1.5, b=0.75, dl=sum of counts for the file, avgdl=mean over files. Symbol bonus: +2.0 per query term that exactly matches a symbol name (case-insensitive), capped at +6.0 per file. Add a small synonym map before scoring: {login:[auth,session], auth:[login,session,token], db:[database,sql], api:[route,endpoint,handler], config:[settings,env]}. Return top-k FileRecords sorted by score desc, score > 0 only.",
+      "tests": "tests/test_retriever.py — index mini_repo, rank 'auth login', assert auth.py is in top-2; rank 'database query', assert api.py ranks"
+    },
+    {
+      "file": "quack/context.py",
+      "purpose": "Build a compact context string from top files + line windows. Pure function.",
+      "public_api": [
+        "build_context(root: Path, files: list[FileRecord], query: str, depth: int) -> str"
+      ],
+      "behavior": "For each FileRecord in order: open the file. Find symbols in the DB whose name matches a query term OR whose body overlaps a line number mentioned in the query. For each matching symbol read body +-10 lines (depth 2). If no symbol matches, read the first 30 lines (imports + top-level) + any line containing a query term +-20 lines. Cap total lines per file by depth: depth1=30, depth2=80, depth3=150. Format: '### FILE: <path> (lines <a>-<b>)\\n<numbered lines>\\n'. Prepend '### QUERY: <query>\\n'. Apply redact() to the whole result before returning. Never read the full file body.",
+      "tests": "none direct (covered by integration)"
+    },
+    {
+      "file": "quack/prompts.py",
+      "purpose": "System prompts and user templates as module-level string constants.",
+      "public_api": [
+        "ASK_SYSTEM",
+        "EXPLAIN_SYSTEM",
+        "REVIEW_SYSTEM",
+        "USER_TEMPLATE"
+      ],
+      "behavior": "Use exactly the strings in llm_prompts. Do not paraphrase.",
+      "tests": "none"
+    },
+    {
+      "file": "quack/tutor.py",
+      "purpose": "LLM client protocol, Ollama implementation, structured output, cache.",
+      "public_api": [
+        "class LLMClient(Protocol): def complete(self, system: str, user: str) -> str: ...",
+        "class OllamaClient: __init__(model: str, endpoint: str = 'http://localhost:11434'); complete(...) -> str",
+        "ask(client: LLMClient, question: str, context: str, config: Config) -> tuple[TutorResponse, int]",
+        "explain_file(client: LLMClient, root: Path, path: Path, config: Config) -> tuple[TutorResponse, int]",
+        "review_batch(client: LLMClient, root: Path, paths: list[Path], config: Config) -> tuple[TutorResponse, int]",
+        "cache_key(question: str, depth: int, file_hashes: list[str]) -> str",
+        "cache_get(key: str, cache_dir: Path, ttl: int) -> TutorResponse | None",
+        "cache_put(key: str, response: TutorResponse, tokens: int, cache_dir: Path) -> None"
+      ],
+      "behavior": "OllamaClient.complete calls ollama.chat(model, messages=[{'role':'system',...},{'role':'user',...}], format=TutorResponse.model_json_schema(), options={'temperature':0.2}). Return message.content. ask(): build user prompt from USER_TEMPLATE, call client, parse JSON into TutorResponse via model_validate_json, return (response, tokens_used) where tokens_used is the sum of prompt_eval_count + eval_count from the ollama response if available else 0. explain_file(): read signatures+head only (30 lines), build a compact context, use EXPLAIN_SYSTEM. review_batch(): read heads of each file, use REVIEW_SYSTEM. cache_key: sha256 of question|depth|sorted(file_hashes). cache_get: read .quack/cache/<key>.json if mtime within ttl. cache_put: write JSON {response, tokens, ts}. All errors from the LLM (timeout, invalid JSON) raise TutorError(Exception) with a clear message.",
+      "tests": "tests use a FakeLLMClient returning a canned JSON TutorResponse; no network"
+    },
+    {
+      "file": "quack/tasks.py",
+      "purpose": "Append and parse TASKS.md.",
+      "public_api": [
+        "append_tasks(tasks_md: Path, tasks: list[Task], source_question: str) -> list[str]",
+        "parse_completed(tasks_md: Path) -> list[str]"
+      ],
+      "behavior": "append_tasks: create file if missing with '# Quack Tasks\\n\\n*Generated by Quack. The duck never modifies your code.*\\n'. Group by severity with '## Critical' and '## Suggestions' headers. Each task is a checkbox: '- [ ] `file:line` — description\\n  - Why: why\\n  - Asked: YYYY-MM-DD'. Return generated task ids (file:line:hash8). Deduplicate: if a task with the same file:line:description already exists unchecked, skip. parse_completed: find lines matching '- [x] `(.+?)`' and return their ids. Use safety.assert_writable before writing.",
+      "tests": "tests/test_tasks.py — append two tasks, read file, assert format; append duplicate, assert no growth; mark one [x], parse_completed returns it"
+    },
+    {
+      "file": "quack/history.py",
+      "purpose": "Log queries and concepts, produce QUACK_HISTORY.md.",
+      "public_api": [
+        "log_query(history_db: Path, question: str, files: list[str], tokens: int, task_ids: list[str], concepts: list[str]) -> None",
+        "write_history_md(history_db: Path, out_path: Path, days: int = 7) -> None"
+      ],
+      "behavior": "log_query: insert into queries and concepts. write_history_md: query the last `days` days, produce '## This week' with: total questions, resolved count (completed tasks), most-reviewed files (top 3 by frequency in queries.files), concept counts (top 5). Add '## Mini-lessons suggested' with a bullet per concept appearing >=3 times, mapping concept->suggestion via a small built-in dict: {async:'Async/await in Python', timezone:'Timezone-aware datetimes', auth:'Session and token handling', sql:'Parameterized SQL and indexing', error:'Exception handling patterns'}. Use safety.assert_writable.",
+      "tests": "none direct (covered by integration)"
+    },
+    {
+      "file": "quack/cli.py",
+      "purpose": "typer entry point. Wire modules. No business logic.",
+      "public_api": [
+        "app = typer.Typer()",
+        "index(root: Path = '.', since: str = None, changed: bool = False)",
+        "ask(question: str, depth: int = 2, dry_run: bool = False, no_cache: bool = False, model: str = None)",
+        "explain(file: Path, depth: int = 2, no_llm: bool = False)",
+        "review(since: str = None, max_files: int = 30, batch_size: int = 3, dry_run: bool = False)",
+        "tasks()",
+        "history()",
+        "verify(audit: bool = False)"
+      ],
+      "behavior": "Each command is a thin orchestrator. ask: safety check -> optional auto-index if files changed -> retriever.rank -> context.build -> redact -> cache_get -> on miss call tutor.ask -> tasks.append_tasks -> history.log_query -> print formatted explanation (question in yellow, explanation in default, tasks in green). --dry-run prints what would be read/written and exits. explain/review: same pattern. verify: call safety.verify_no_source_changes and print PASS/FAIL; with --audit print safety.audit_write_sites. tasks: print TASKS.md. history: regenerate and print QUACK_HISTORY.md. On TutorError print a clear message and exit code 2. Use rich if available, else plain print.",
+      "tests": "none (integration via demo)"
+    },
+    {
+      "file": "quack/__main__.py",
+      "purpose": "Enable python -m quack.",
+      "public_api": [],
+      "behavior": "from .cli import app; app()",
+      "tests": "none"
+    },
+    {
+      "file": "quack/__init__.py",
+      "purpose": "Package marker and version.",
+      "public_api": ["__version__"],
+      "behavior": "__version__ = '1.0.0'",
+      "tests": "none"
+    }
+  ],
+
+  "symbol_patterns": {
+    "python": ["^(?P<indent>\\s*)(async\\s+def|def|class)\\s+(?P<name>\\w+)"],
+    "javascript": [
+      "^(?P<indent>\\s*)(export\\s+)?(async\\s+)?(function|class)\\s+(?P<name>\\w+)",
+      "^(?P<indent>\\s*)(const|let|var)\\s+(?P<name>\\w+)\\s*=\\s*(\\([^)]*\\)\\s*=>|function|async)"
+    ],
+    "go": [
+      "^(?P<indent>\\s*)func\\s+(\\([^)]*\\)\\s+)?(?P<name>\\w+)",
+      "^(?P<indent>\\s*)type\\s+(?P<name>\\w+)\\s+(struct|interface)"
+    ],
+    "rust": [
+      "^(?P<indent>\\s*)(pub\\s+)?(async\\s+)?fn\\s+(?P<name>\\w+)",
+      "^(?P<indent>\\s*)(pub\\s+)?(struct|enum|trait)\\s+(?P<name>\\w+)"
+    ],
+    "ruby": ["^(?P<indent>\\s*)(def|class|module)\\s+(?P<name>\\w+)"],
+    "java": [
+      "^(?P<indent>\\s*)(public|private|protected)?\\s*(static\\s+)?(class|interface|enum)\\s+(?P<name>\\w+)",
+      "^(?P<indent>\\s*)(public|private|protected)\\s+[\\w<>\\[\\]]+\\s+(?P<name>\\w+)\\s*\\("
+    ]
+  },
+
+  "bm25": {
+    "k1": 1.5,
+    "b": 0.75,
+    "idf": "log((N - df + 0.5)/(df + 0.5) + 1)",
+    "term_score": "idf * (f * (k1 + 1)) / (f + k1 * (1 - b + b * dl / avgdl))",
+    "symbol_bonus_per_match": 2.0,
+    "symbol_bonus_cap": 6.0,
+    "synonyms": {
+      "login": ["auth", "session"],
+      "auth": ["login", "session", "token"],
+      "db": ["database", "sql"],
+      "api": ["route", "endpoint", "handler"],
+      "config": ["settings", "env"]
+    }
+  },
+
+  "token_budget": {
+    "index": 0,
+    "ask_depth_1": "~1000-1500",
+    "ask_depth_2": "~2000-3000",
+    "ask_depth_3": "~4000-5000",
+    "explain": "~1000-2000",
+    "review_per_file": "~800-1200",
+    "cached_ask": 0,
+    "hard_cap_per_ask": 5000
+  },
+
+  "llm_prompts": {
+    "ASK_SYSTEM": "You are Quack, a rubber duck tutor for a software engineer. You have been given compact context from their real repository, including file paths, line numbers, and symbol bodies.\n\nYour job:\n1. Ask exactly ONE Socratic question that helps the engineer think about the problem. It must be specific to their code, not generic.\n2. After the question, give a clear explanation of the likely cause, referencing file:line. Be concrete. Do not hedge.\n3. Produce a list of tasks the ENGINEER must do to fix the issue. Each task must have: file, line, severity (critical|suggestion), description (imperative), why (one sentence).\n4. Tag the concepts involved (e.g., \"async\", \"timezone\", \"token-expiry\").\n5. State your confidence: high|medium|low. Be honest.\n\nRules:\n- NEVER write code to files. You are read-only.\n- NEVER invent file paths or line numbers. Only reference what is in the context.\n- If the context is insufficient, say so and set confidence to low. Suggest which file the engineer should show you.\n- Keep explanations under 250 words.\n- Output ONLY valid JSON matching the TutorResponse schema.\n- You are a duck. One short quack is allowed at the start of the explanation. No more.",
+    "EXPLAIN_SYSTEM": "You are Quack, a rubber duck tutor. You have been given one file's signatures and structure (not the full body).\n\nYour job: explain what this file does in plain language, then list the top 1-3 things the engineer should review or improve.\n\nRules:\n- Reference symbols by name and line.\n- Be concise. Under 200 words.\n- Output ONLY valid JSON matching TutorResponse.\n- No code edits. Read-only.",
+    "REVIEW_SYSTEM": "You are Quack, a rubber duck tutor reviewing a batch of files for common issues.\n\nYou have 1-3 files. For each, identify 0-3 concrete issues worth the engineer's attention. Focus on:\n- Logic bugs (inverted conditions, off-by-one, wrong operator)\n- Error handling gaps (unhandled exceptions, ignored returns)\n- Obvious performance issues (N+1, O(n^2) on large data)\n- Security smells (unsanitized input, hardcoded secrets, missing auth checks)\n\nDo NOT nitpick style. Do NOT suggest rewrites. Be specific: file:line + what + why.\n\nRules:\n- Output ONLY valid JSON matching TutorResponse.\n- If a file has no real issues, return empty tasks for it. That is a good answer.\n- Max 3 tasks per file.\n- Read-only.",
+    "USER_TEMPLATE": "Question from the engineer:\n{question}\n\nRetrieved context (compact, from their repo):\n{context}\n\nNow produce your TutorResponse JSON."
+  },
+
+  "cli_commands": [
+    {
+      "name": "index",
+      "usage": "quack index [--since REV] [--changed]",
+      "description": "Build or update .quack/index.db. 0 LLM tokens.",
+      "acceptance": "prints IndexStats; .quack/index.db exists with non-empty files, symbols"
+    },
+    {
+      "name": "ask",
+      "usage": "quack ask \"<question>\" [--depth 1|2|3] [--dry-run] [--no-cache] [--model NAME]",
+      "description": "Ask the duck about a bug. Writes TASKS.md. Never touches source.",
+      "acceptance": "prints Socratic question + explanation + tasks; TASKS.md updated; tokens_used <= 5000"
+    },
+    {
+      "name": "explain",
+      "usage": "quack explain <file> [--depth 1|2|3] [--no-llm]",
+      "description": "Explain a single file from its signatures.",
+      "acceptance": "prints explanation; with --no-llm prints symbol list without calling the model"
+    },
+    {
+      "name": "review",
+      "usage": "quack review [--since REV] [--max-files N] [--batch-size N] [--dry-run]",
+      "description": "Batch review of recent or top-complexity files.",
+      "acceptance": "appends severity-ranked tasks to TASKS.md; respects --max-files"
+    },
+    {
+      "name": "tasks",
+      "usage": "quack tasks",
+      "description": "Print TASKS.md.",
+      "acceptance": "prints file contents; exits 0 even if file missing (prints 'No tasks yet.')"
+    },
+    {
+      "name": "history",
+      "usage": "quack history",
+      "description": "Regenerate and print QUACK_HISTORY.md.",
+      "acceptance": "prints growth summary; file written"
+    },
+    {
+      "name": "verify",
+      "usage": "quack verify [--audit]",
+      "description": "Prove no source files were modified. With --audit, list all write sites.",
+      "acceptance": "prints PASS/FAIL; exits 1 on FAIL"
+    }
+  ],
+
+  "build_order": [
+    {
+      "phase": 1,
+      "modules": ["models.py", "config.py", "safety.py", "redact.py"],
+      "check": "import quack.models, quack.config, quack.safety, quack.redact; run pytest tests/test_safety.py tests/test_redact.py"
+    },
+    {
+      "phase": 2,
+      "modules": ["symbols.py", "indexer.py"],
+      "check": "quack index tests/fixtures/mini_repo; sqlite3 .quack/index.db 'select count(*) from symbols' returns >= 3"
+    },
+    {
+      "phase": 3,
+      "modules": ["retriever.py", "context.py"],
+      "check": "pytest tests/test_retriever.py"
+    },
+    {
+      "phase": 4,
+      "modules": ["prompts.py", "tutor.py"],
+      "check": "with Ollama running, quack ask 'what does auth.py do' returns valid TutorResponse JSON"
+    },
+    {
+      "phase": 5,
+      "modules": ["tasks.py", "history.py"],
+      "check": "pytest tests/test_tasks.py; TASKS.md format correct"
+    },
+    {
+      "phase": 6,
+      "modules": ["cli.py", "__main__.py"],
+      "check": "all 7 subcommands appear in `quack --help`; `quack verify` prints PASS"
+    },
+    {
+      "phase": 7,
+      "modules": ["tests/fixtures/mini_repo/*"],
+      "check": "full pipeline runs end-to-end on the fixture without touching source"
+    },
+    {
+      "phase": 8,
+      "modules": ["demo/*", "README.md"],
+      "check": "demo/TASKS.md and demo/QUACK_HISTORY.md captured from a real run"
+    }
+  ],
+
+  "acceptance_criteria": [
+    "All unit tests pass with no network and no model running.",
+    "`quack index` on a real repo (100+ files) completes in under 5 seconds and uses 0 LLM tokens.",
+    "`quack ask` returns a TutorResponse with at least 1 task and writes it to TASKS.md.",
+    "`quack verify` returns PASS after `quack ask` (no source files changed).",
+    "`quack ask` on the same question twice within 24h returns the cached answer with 0 LLM tokens the second time.",
+    "`quack ask` with Ollama stopped exits with code 2 and a clear message, without writing anything.",
+    "`quack --help` lists exactly: index, ask, explain, review, tasks, history, verify.",
+    "No source file in the repo under test is modified by any command (verified by git status and by safety.verify).",
+    "Redaction masks API keys, GitHub tokens, Slack tokens, and private keys before they reach the index or the LLM.",
+    "README.md explains: what it is, install, first run, the 7 commands, the token budget, and the privacy guarantee."
+  ],
+
+  "non_goals": [
+    "No web UI, no HTTP server, no FastAPI/Flask, no React, no browser automation.",
+    "No embeddings and no vector database in v1 (BM25 only).",
+    "No tree-sitter in v1 (regex only).",
+    "No file editing, no code generation into the repo, no running code, no git commits.",
+    "No multi-user, no auth, no accounts, no telemetry, no cloud deployment.",
+    "No Sentry, no Temporal, no Tiger Data, no Render, no .tech domain in the build (these are optional partner integrations for the submission, documented in README, not implemented in code).",
+    "No fine-tuning, no model hosting, no GPU code.",
+    "No plugin system, no extension API in v1."
+  ],
+
+  "optional_partner_integrations": {
+    "note": "Document these in README as \"What I'd do next\" and optionally mention in the DEV post. Do NOT implement them in code unless you have spare time after the acceptance criteria pass.",
+    "gemma": "Already the default model — zero extra work. This is the primary prize category.",
+    "entire": "Export .quack/history.db as a readable session log into demo/session.log for the post.",
+    "tech_domain": "Host a static landing page separately; not part of this codebase.",
+    "sentry": "Optional: wrap tutor.ask with Sentry spans to visualize per-query token/latency. Do NOT add unless acceptance criteria are met and a day remains."
+  },
+
+  "definition_of_done": [
+    "file_tree matches exactly",
+    "all 7 CLI commands work",
+    "all unit tests pass offline",
+    "quack verify returns PASS after every other command",
+    "TASKS.md and QUACK_HISTORY.md are generated correctly",
+    "README.md is complete",
+    "demo/TASKS.md, demo/QUACK_HISTORY.md, demo/session.log exist",
+    "token budget table in README matches measured numbers",
+    "no source file is modified by any command under any circumstances"
+  ]
+}

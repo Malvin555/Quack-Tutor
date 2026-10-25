@@ -10,25 +10,20 @@ Quack is a CLI rubber duck. You describe a bug; it finds the few files that matt
 Socratic question, explains the likely cause with `file:line`, and writes a `TASKS.md` for _you_ to
 fix. It never edits source. That's enforced in code (a write allowlist) and provable with `quack verify`.
 
+<p align="center">
+  <img src="assets/quack.png" alt="Quack Preview" width="700">
+</p>
+
+<p align="center">
+  <img src="assets/demo_quack.png" alt="Quack CLI Demo" width="700">
+</p>
+
 **The lazy payoff:** the duck does the tedious part (hunting through the repo, forming a hypothesis,
 writing the to-do list) and leaves the part that teaches you something. Pipe a failing test in and walk away:
 
 ```bash
 pytest -x 2>&1 | quack ask "why does this fail?" --stdin
 ```
-
-## Demo
-
-[PASTE a terminal recording or screenshots of a real run here]
-
-```
-$ quack ask "why does session_valid reject valid sessions?"
-[PASTE real output]
-$ quack verify
-PASS: no source files were modified.
-```
-
-Session log: [PASTE link to your `quack export` output or Entire session]
 
 ## Why open models mattered
 
@@ -37,7 +32,7 @@ Session log: [PASTE link to your `quack export` output or Entire session]
   non-local host until you opt in.
 - **Cost and offline.** After `ollama pull gemma3:4b` it runs forever for free, with no internet.
 - **Swappable.** One config line moves it to a bigger open-weight model (e.g. Gemma 3 27B on OpenRouter)
-  with local fallback, so I could compare models on the same bug. [PASTE your comparison]
+  with local fallback, so I could compare models on the same bug.
 
 ## Slow and steady: spending tokens like a sloth
 
@@ -62,4 +57,4 @@ Tree-sitter symbols, embeddings, resumable batch review.
 Gemma (default model), Entire (`quack export` session log), Sentry (opt-in token/latency spans).
 [Only keep the ones you actually ran and can show.]
 
-Code: [LINK TO REPO]
+Code: https://github.com/Malvin555/Quack-Tutor

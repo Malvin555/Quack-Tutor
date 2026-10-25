@@ -1,0 +1,20 @@
+---
+import Duck from "./Duck.astro";
+
+const { VERSION, REPO_URL } = Astro.props;
+---
+
+<footer>
+    <div>
+        <p>
+            Quack v{VERSION} · MIT licensed. Built for learning and contributing
+            to Open-Source AI Challenge, Week 3: Slow and Steady.
+        </p>
+        <p>The duck never modifies your code.</p>
+        <div class="links">
+            {REPO_URL && <a href={REPO_URL}>source</a>}
+            <a href="#top">back to top</a>
+        </div>
+    </div>
+    <Duck size={100} mood="happy" />
+</footer>

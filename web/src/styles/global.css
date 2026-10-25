@@ -82,20 +82,6 @@ pre,
 kbd {
     font-family: var(--mono);
 }
-.skip {
-    position: absolute;
-    left: -999px;
-    top: 0;
-    background: var(--ink);
-    color: var(--paper);
-    padding: 0.5rem 1rem;
-    z-index: 99;
-}
-.skip:focus {
-    left: 8px;
-    top: 8px;
-}
-
 .page {
     position: relative;
     max-width: 1260px;
@@ -413,12 +399,14 @@ em {
     border: 1px solid var(--rule);
     padding: 0.9rem 4.6rem 0.9rem 1rem;
     font: 400 0.9rem/1.65 var(--mono);
-    overflow-x: auto;
 }
+
 .code code {
     white-space: pre;
     display: block;
+    overflow-x: auto;
 }
+
 .code .p {
     color: var(--muted);
     user-select: none;
@@ -428,6 +416,7 @@ em {
     position: absolute;
     right: 0.55rem;
     top: 0.55rem;
+    z-index: 2;
     padding: 0.25rem 0.55rem;
     font-size: 0.72rem;
 }

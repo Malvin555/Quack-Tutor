@@ -1,9 +1,13 @@
 # 🦆 Quack, the rubber duck tutor
 
+<p align="center">
+  <img src="assets/quack.svg" alt="Quack logo" width="120" />
+</p>
+
 **The AI coding assistant that can't touch your code.**
 
 Quack indexes your repo (zero LLM tokens), retrieves only the few files that matter, asks you
-**one Socratic question**, explains the likely cause of a bug, and writes a `TASKS.md` for *you* to
+**one Socratic question**, explains the likely cause of a bug, and writes a `TASKS.md` for _you_ to
 fix. It never edits source files. It is read-only by construction and can prove it (`quack verify`).
 
 Built for the Hacktoberfest "Slow and Steady" challenge: the duck conserves tokens, moves
@@ -59,23 +63,23 @@ pytest -x 2>&1 | quack ask "why does this fail?" --stdin
 
 ## Commands
 
-| Command | What it does |
-|---|---|
-| `quack index [--since REV] [--changed]` | Build/update `.quack/index.db`. 0 LLM tokens. |
-| `quack ask "..." [--depth 1\|2\|3] [--dry-run] [--no-cache] [--model M] [--provider P] [--stdin] [--json]` | Ask the duck. Writes `TASKS.md`. |
-| `quack explain FILE [--no-llm]` | Explain one file from its signatures. |
-| `quack review [--since REV] [--max-files N] [--batch-size N] [--dry-run]` | Batch review; severity-ranked tasks. |
-| `quack tasks` | Print `TASKS.md`. |
-| `quack history` | Regenerate `QUACK_HISTORY.md` (weekly growth, mini-lessons). |
-| `quack verify [--audit]` | Prove no source changed; `--audit` lists every write site. |
-| `quack chat` | Interactive follow-ups. Slash commands: `/help /files /tasks /depth /model /verify /clear /quit`. |
-| `quack compare "..." -w ollama -w openrouter:MODEL` | Same question to several models side by side (confidence, tokens, latency, where each points). Writes no tasks. |
-| `quack init` | Pick a provider/model; writes `.quack/config.toml`. |
-| `quack providers` | List providers and which are ready. |
-| `quack doctor` | Check Ollama, model, API keys, index. |
-| `quack config show\|get\|set` | Inspect or change settings. |
-| `quack export [-o -]` | Readable session log (default `.quack/session.log`). |
-| `quack cache stats\|clear` | Inspect the 24h answer cache. |
+| Command                                                                                                    | What it does                                                                                                    |
+| ---------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `quack index [--since REV] [--changed]`                                                                    | Build/update `.quack/index.db`. 0 LLM tokens.                                                                   |
+| `quack ask "..." [--depth 1\|2\|3] [--dry-run] [--no-cache] [--model M] [--provider P] [--stdin] [--json]` | Ask the duck. Writes `TASKS.md`.                                                                                |
+| `quack explain FILE [--no-llm]`                                                                            | Explain one file from its signatures.                                                                           |
+| `quack review [--since REV] [--max-files N] [--batch-size N] [--dry-run]`                                  | Batch review; severity-ranked tasks.                                                                            |
+| `quack tasks`                                                                                              | Print `TASKS.md`.                                                                                               |
+| `quack history`                                                                                            | Regenerate `QUACK_HISTORY.md` (weekly growth, mini-lessons).                                                    |
+| `quack verify [--audit]`                                                                                   | Prove no source changed; `--audit` lists every write site.                                                      |
+| `quack chat`                                                                                               | Interactive follow-ups. Slash commands: `/help /files /tasks /depth /model /verify /clear /quit`.               |
+| `quack compare "..." -w ollama -w openrouter:MODEL`                                                        | Same question to several models side by side (confidence, tokens, latency, where each points). Writes no tasks. |
+| `quack init`                                                                                               | Pick a provider/model; writes `.quack/config.toml`.                                                             |
+| `quack providers`                                                                                          | List providers and which are ready.                                                                             |
+| `quack doctor`                                                                                             | Check Ollama, model, API keys, index.                                                                           |
+| `quack config show\|get\|set`                                                                              | Inspect or change settings.                                                                                     |
+| `quack export [-o -]`                                                                                      | Readable session log (default `.quack/session.log`).                                                            |
+| `quack cache stats\|clear`                                                                                 | Inspect the 24h answer cache.                                                                                   |
 
 Global: `-C/--root PATH` to work on another repo. Everything works without a model except
 `ask`, `explain` (without `--no-llm`) and `review`; `index`, `tasks`, `history`, `verify`,
@@ -124,13 +128,13 @@ ___( o)>  the rubber duck that can't touch your code
 
 Targets from the spec (`--depth` controls it; context is hard-trimmed to fit `max_tokens_per_ask`, default 5000):
 
-| Operation | Target tokens |
-|---|---|
-| `index` | 0 |
+| Operation             | Target tokens                        |
+| --------------------- | ------------------------------------ |
+| `index`               | 0                                    |
 | `ask` depth 1 / 2 / 3 | ~1000-1500 / ~2000-3000 / ~4000-5000 |
-| `explain` | ~1000-2000 |
-| `review` per file | ~800-1200 |
-| cached `ask` | 0 |
+| `explain`             | ~1000-2000                           |
+| `review` per file     | ~800-1200                            |
+| cached `ask`          | 0                                    |
 
 These are design targets. Measure your own with `quack ask ... --json` (provider-reported usage,
 estimated at ~4 chars/token when a provider reports none).
@@ -144,37 +148,3 @@ estimated at ~4 chars/token when a provider reports none).
   text reaches a model.
 - Model answers are grounded: tasks pointing at files that don't exist are dropped.
 - No telemetry. Optional tracing is off by default (below).
-
-## Sponsor and partner hooks
-
-| Partner | How it fits | Status |
-|---|---|---|
-| **Gemma** | Default model is `gemma3:4b` via Ollama; `google/gemma-3-27b-it` on OpenRouter. | Built in |
-| **Entire** | `quack export` writes a readable session log (provider, tokens, latency, answers) to share in your post. | Built in |
-| **Sentry** | Opt-in spans with tokens/latency/provider only (never code or prompts): `pip install ".[sentry]"`, `quack config set sentry true`, set `SENTRY_DSN`. `quack config set trace true` writes a local `.quack/trace.jsonl` instead. | Built in, untested against a live Sentry project |
-| **GitHub** | `.github/workflows/ci.yml` runs the offline test suite; `quack review --since origin/main --json` suits PR checks. | Built in |
-| **DigitalOcean / Backboard / other hosts** | Any OpenAI-compatible endpoint works via `custom`. Check each vendor's docs for their base URL and key. | Config only, untested |
-| **.tech domain** | A landing page would live outside this codebase. | Not in code |
-
-## What I'd do next
-
-Tree-sitter symbol extraction, embeddings for retrieval, a Temporal-style resumable `review`,
-and a fine-tuned tutor voice. All out of scope for v1 (regex + BM25 only).
-
-## Mascot and landing page
-
-The duck is an original character. In the terminal it changes face with the model's confidence
-(`quack duck` shows them all). The `web/` folder is an Astro landing page for the CLI; see `web/README.md`.
-
-## Project files
-
-`pyproject.toml`, `requirements.txt`, `.env.example`, `LICENSE` (MIT), `CONTRIBUTING.md`, `Makefile`,
-`BUILD_SPEC.json` (the original build spec), `scripts/make_demo.sh` (captures real `demo/` files),
-`POST.md` (DEV post draft), `.github/workflows/ci.yml`.
-
-## Development
-
-```bash
-pip install -e ".[dev]"
-pytest -q      
-```

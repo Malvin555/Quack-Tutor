@@ -1,708 +1,549 @@
 ---
 import Base from "../layouts/Base.astro";
 import Duck from "../components/Duck.astro";
-import { REPO_URL, VERSION } from "../site";
-
-const headline = [
-    { t: "The" },
-    { t: "AI" },
-    { t: "that" },
-    { t: "can't" },
-    { t: "touch", mark: true },
-    { t: "your" },
-    { t: "code." },
-];
-
-const steps = [
-    {
-        n: "01",
-        name: "Index",
-        text: "Walks the repo with the filesystem, regex and SQLite. Symbols, term counts, TODOs. No model involved.",
-        cost: "0 tokens",
-    },
-    {
-        n: "02",
-        name: "Retrieve",
-        text: "BM25 over the index, plus a bonus for matching symbol and file names. Pipe in a traceback and the files it names are pinned.",
-        cost: "local",
-    },
-    {
-        n: "03",
-        name: "Window",
-        text: "Only line windows around matching symbols, capped at 30 / 80 / 150 lines per file by depth. Never a whole file.",
-        cost: "local",
-    },
-    {
-        n: "04",
-        name: "Redact",
-        text: "API keys, GitHub and Slack tokens, AWS keys and private keys are masked before anything reaches a model.",
-        cost: "local",
-    },
-    {
-        n: "05",
-        name: "Ask",
-        text: "One call to the model, structured JSON back: a question, a cause, tasks, concepts, confidence.",
-        cost: "the model",
-        model: true,
-    },
-    {
-        n: "06",
-        name: "Ground",
-        text: "Tasks that point at files that don't exist are dropped. Impossible line numbers are clamped. Then TASKS.md.",
-        cost: "local",
-    },
-];
-
-const groups = [
-    {
-        name: "Ask the duck",
-        cmds: [
-            [
-                'ask "…"',
-                "--stdin --depth --provider",
-                "Explain a bug and write TASKS.md. Cached for 24h, repeats cost 0 tokens.",
-            ],
-            [
-                "chat",
-                "",
-                "Follow-up questions with memory. /files /model /depth /verify.",
-            ],
-            [
-                'compare "…"',
-                "-w A -w B",
-                "Same question to several models, side by side. Writes no tasks.",
-            ],
-            [
-                "explain FILE",
-                "--no-llm",
-                "What a file does, from its signatures.",
-            ],
-            ["review", "--since REV", "Batch review of the riskiest files."],
-        ],
-    },
-    {
-        name: "Track",
-        cmds: [
-            ["tasks", "", "Your to-do list. Tick a box and history notices."],
-            [
-                "history",
-                "",
-                "Weekly questions, resolved tasks, mini-lessons for repeated concepts.",
-            ],
-            [
-                "verify",
-                "--audit",
-                "Prove no source file changed. --audit lists every write site.",
-            ],
-            ["export", "", "A readable session log you can share."],
-        ],
-    },
-    {
-        name: "Set up",
-        cmds: [
-            ["doctor", "", "Checks Ollama, the model, keys and the index."],
-            [
-                "init",
-                "--provider --fallback",
-                "Pick a provider. Remote ones are opt-in.",
-            ],
-            [
-                "providers",
-                "",
-                "Every supported provider and whether it is ready.",
-            ],
-            [
-                "config",
-                "show | get | set",
-                "Read or change .quack/config.toml.",
-            ],
-            ["index", "--changed --since", "Build the index. 0 tokens."],
-            ["cache", "stats | clear", "Inspect or clear stored answers."],
-        ],
-    },
-];
+import { REPO_URL, VERSION } from "../config/site";
+import Footer from "@/components/Footer.astro";
+import Header from "@/components/Header.astro";
+import { headline } from "../constant/headline";
+import { groups } from "../constant/groups";
+import { steps } from "../constant/steps";
 ---
 
 <Base>
-    <a class="skip" href="#main">
-        Skip to content
-    </a>
-    <div class="page">
-        <div class="rail" aria-hidden="true">
-            <div class="rail-in">
-                <div class="trail"></div>
-                <Duck class="walker" size={64} label="" />
-            </div>
+    <div class="rail" aria-hidden="true" id="top">
+        <div class="rail-in">
+            <div class="trail"></div>
+            <Duck class="walker" size={64} label="" />
         </div>
+    </div>
 
-        <header class="top">
-            <a class="brand" href="#top" aria-label="Quack, home">
-                <Duck size={30} label="" />
-                quack
-            </a>
-            <nav aria-label="Sections">
-                <a href="#ask">ask</a>
-                <a href="#how">how</a>
-                <a href="#read-only">read-only</a>
-                <a href="#budget">budget</a>
-                <a href="#models">models</a>
-                <a href="#start">start</a>
-            </nav>
-        </header>
+    <Header />
 
-        <main id="main">
-            <section class="hero" id="top">
-                <div>
-                    <p class="eyebrow">rubber duck · read-only · local-first</p>
-                    <h1 aria-label="The AI that can't touch your code.">
-                        {headline.map((w, i) => (
-                            <>
-                                <span
-                                    class:list={["w", { mark: w.mark }]}
-                                    style={`--i:${i}`}
-                                    aria-hidden="true"
+    <main id="main">
+        <section class="hero">
+            <div>
+                <h1 aria-label="The AI that can't touch your code.">
+                    {headline.map((w, i) => (
+                        <>
+                            <span
+                                class:list={["w", { mark: w.mark }]}
+                                style={`--i:${i}`}
+                                aria-hidden="true"
+                            >
+                                {w.t}
+                            </span>{" "}
+                        </>
+                    ))}
+                </h1>
+                <p class="lead">
+                    Quack reads the few lines that matter, asks <em>one</em>{" "}
+                    question, explains the likely cause and writes a{" "}
+                    <code>TASKS.md</code>. You make the fix.
+                </p>
+                <div class="cta-row">
+                    <div class="code">
+                        <code data-copy-text='quack ask "why does login fail?"'>
+                            <span class="p">$ </span>quack ask "why does login
+                            fail?"
+                        </code>
+                        <button class="btn" data-copy type="button">
+                            copy
+                        </button>
+                    </div>
+                    <a class="btn" href="#start">
+                        Get started
+                    </a>
+                </div>
+            </div>
+            <div class="hero-duck">
+                <Duck size={290} talk />
+                <div class="ground"></div>
+                <p class="hint">click the duck</p>
+            </div>
+            <div class="facts rv">
+                <div class="fact">
+                    <b>0</b>
+                    <span>
+                        tokens to index your repo. Pure filesystem and regex.
+                    </span>
+                </div>
+                <div class="fact">
+                    <b>3</b>
+                    <span>
+                        places it may write: TASKS.md, QUACK_HISTORY.md and
+                        .quack/
+                    </span>
+                </div>
+                <div class="fact">
+                    <b>5000</b>
+                    <span>
+                        token hard cap per question. Repeat questions are free.
+                    </span>
+                </div>
+            </div>
+        </section>
+
+        <section class="sec" id="ask">
+            <div class="sec-label">
+                <span class="num">01</span>
+                <span class="tag">ask</span>
+                <span class="cap">
+                    What you get back for one question about a bug.
+                </span>
+            </div>
+            <div class="sec-body">
+                <h2 class="rv">
+                    One question, then the <span class="mark">cause</span>.
+                </h2>
+                <p class="lede rv">
+                    The duck doesn't hand you a patch. It asks something
+                    specific to your code, tells you where it thinks the bug is,
+                    and leaves you a checklist.
+                </p>
+                <div class="ask-grid rv">
+                    <div>
+                        <div class="term" id="term">
+                            <div class="term-bar">
+                                <span>~/mini_repo</span>
+                                <button
+                                    type="button"
+                                    id="replay"
+                                    aria-label="Replay the demo"
                                 >
-                                    {w.t}
-                                </span>{" "}
-                            </>
-                        ))}
-                    </h1>
-                    <p class="lead">
-                        Quack reads the few lines that matter, asks <em>one</em>{" "}
-                        question, explains the likely cause and writes a{" "}
-                        <code>TASKS.md</code>. You make the fix.
+                                    replay
+                                </button>
+                            </div>
+                            <pre><span class="ln" data-r="0"><span class="dim">$ </span><span id="cmd">quack ask "why does session_valid reject valid sessions?"</span></span><span class="ln" data-r="1"> </span><span class="ln" data-r="1"><span class="q">🦆 Quack asks:</span></span><span class="ln" data-r="1"><span class="q">  When is a session supposed to count as valid: before</span></span><span class="ln" data-r="1"><span class="q">  or after its stored expiry time?</span></span><span class="ln" data-r="2"> </span><span class="ln" data-r="2">Quack. session_valid returns True only when the stored</span><span class="ln" data-r="2">expiry is <em style="font-family:inherit;font-size:1em">earlier</em> than now (auth.py:28), so live</span><span class="ln" data-r="2">sessions look expired and dead ones look valid.</span><span class="ln" data-r="3"> </span><span class="ln" data-r="3"><span class="ok">Tasks for you (the duck never edits your code):</span></span><span class="ln" data-r="3"><span class="crit">  [critical]</span> <span class="ok">auth.py:28 - Reverse the comparison in session_valid</span></span><span class="ln" data-r="3"><span class="dim">      why: expiry must be later than the current time.</span></span><span class="ln" data-r="3"><span class="ok">  [suggestion]</span> <span class="ok">auth.py:10 - Compare passwords in constant time</span></span><span class="ln" data-r="4"> </span><span class="ln" data-r="4"><span class="dim">concepts: auth, token-expiry | confidence: high | ollama:gemma3:4b</span></span><span class="ln" data-r="5"> </span><span class="ln" data-r="5"><span class="dim">$ </span>quack verify</span><span class="ln" data-r="5"><span class="ok">PASS: no source files were modified.</span></span></pre>
+                        </div>
+                        <p class="caption">
+                            Illustrative output on the bundled mini_repo. Run it
+                            yourself for real token counts and your own model's
+                            wording.
+                        </p>
+                    </div>
+                    <ol class="callouts" aria-label="What each part means">
+                        <li tabindex="0" data-callout="1">
+                            <b>A Socratic question</b>
+                            <span>
+                                Exactly one, specific to your code. It makes you
+                                think before you read the answer.
+                            </span>
+                        </li>
+                        <li tabindex="0" data-callout="2">
+                            <b>The likely cause, with file:line</b>
+                            <span>
+                                Concrete and capped at 250 words. If it can't
+                                tell, it says so and asks for another file.
+                            </span>
+                        </li>
+                        <li tabindex="0" data-callout="3">
+                            <b>Tasks, ranked</b>
+                            <span>
+                                Written to TASKS.md as checkboxes, critical
+                                first. Duplicates are skipped.
+                            </span>
+                        </li>
+                        <li tabindex="0" data-callout="4">
+                            <b>Confidence and cost</b>
+                            <span>
+                                High, medium or low, plus the model that
+                                answered. The duck is honest when it's unsure.
+                            </span>
+                        </li>
+                    </ol>
+                </div>
+            </div>
+        </section>
+
+        <section class="sec" id="how">
+            <div class="sec-label">
+                <span class="num">02</span>
+                <span class="tag">how</span>
+                <span class="cap">
+                    The path from your question to TASKS.md.
+                </span>
+            </div>
+            <div class="sec-body">
+                <h2 class="rv">Only one step in six uses the model.</h2>
+                <p class="lede rv">
+                    Everything else is regex, SQLite and arithmetic on your
+                    machine. That's why it's cheap, fast and works offline.
+                </p>
+                <div class="pipe" id="pipe">
+                    {steps.map((s) => (
+                        <div class="step">
+                            <h3>
+                                <small>{s.n}</small>
+                                {s.name}
+                            </h3>
+                            <p>{s.text}</p>
+                            <span class:list={["cost", { model: s.model }]}>
+                                {s.cost}
+                            </span>
+                        </div>
+                    ))}
+                </div>
+                <p class="pipe-note rv">
+                    Pipe a failing test straight in:{" "}
+                    <code>
+                        pytest -x 2&gt;&amp;1 | quack ask "why?" --stdin
+                    </code>
+                    . Files named in the traceback are read first.
+                </p>
+            </div>
+        </section>
+
+        <section class="sec" id="read-only">
+            <div class="sec-label">
+                <span class="num">03</span>
+                <span class="tag">read-only</span>
+                <span class="cap">Not a promise. A check in the code.</span>
+            </div>
+            <div class="sec-body">
+                <h2 class="rv">
+                    Ask the duck to <span class="mark">edit</span> a file.
+                </h2>
+                <p class="lede rv">
+                    Every write goes through one function. It allows{" "}
+                    <code>TASKS.md</code>, <code>QUACK_HISTORY.md</code> and
+                    anything under <code>.quack/</code>. Nothing else. Try it,
+                    this runs the same rule.
+                </p>
+                <div class="deny rv">
+                    <div>
+                        <ul class="files" id="files">
+                            <li>
+                                <button
+                                    type="button"
+                                    data-path="auth.py"
+                                    aria-pressed="false"
+                                >
+                                    auth.py <small>source</small>
+                                </button>
+                            </li>
+                            <li>
+                                <button
+                                    type="button"
+                                    data-path="api.py"
+                                    aria-pressed="false"
+                                >
+                                    api.py <small>source</small>
+                                </button>
+                            </li>
+                            <li>
+                                <button
+                                    type="button"
+                                    data-path="README.md"
+                                    aria-pressed="false"
+                                >
+                                    README.md <small>docs</small>
+                                </button>
+                            </li>
+                            <li>
+                                <button
+                                    type="button"
+                                    data-path="TASKS.md"
+                                    aria-pressed="false"
+                                >
+                                    TASKS.md <small>generated</small>
+                                </button>
+                            </li>
+                            <li>
+                                <button
+                                    type="button"
+                                    data-path=".quack/index.db"
+                                    aria-pressed="false"
+                                >
+                                    .quack/index.db <small>generated</small>
+                                </button>
+                            </li>
+                        </ul>
+                        <form class="try" id="try" autocomplete="off">
+                            <label
+                                class="muted mono"
+                                for="path"
+                                style="position:absolute;left:-999px"
+                            >
+                                File path to try
+                            </label>
+                            <input
+                                id="path"
+                                name="path"
+                                placeholder="or type any path…"
+                                spellcheck="false"
+                            />
+                            <button class="btn" type="submit">
+                                try
+                            </button>
+                        </form>
+                    </div>
+                    <div class="verdict" aria-live="polite">
+                        <div class="out" id="verdict-out">
+                            <span class="dim">
+                                Pick a file. The duck will try to write to it.
+                            </span>
+                        </div>
+                        <div class="verdict-foot">
+                            <span class="dim">
+                                quack.safety.assert_writable(path)
+                            </span>
+                            <Duck
+                                size={84}
+                                id="deny-duck"
+                                label="The duck reacting to the write attempt"
+                            />
+                        </div>
+                    </div>
+                </div>
+                <div class="writable rv" aria-label="Writable paths">
+                    <span>TASKS.md</span>
+                    <span>QUACK_HISTORY.md</span>
+                    <span>.quack/**</span>
+                </div>
+                <p class="caption rv">
+                    After any command, <code>quack verify</code> checks git
+                    status (or file hashes without git) and exits 1 on any
+                    drift. <code>quack verify --audit</code> lists every write
+                    site in the package.
+                </p>
+            </div>
+        </section>
+
+        <section class="sec" id="budget">
+            <div class="sec-label">
+                <span class="num">04</span>
+                <span class="tag">budget</span>
+                <span class="cap">
+                    Slow and steady: spend tokens like a sloth.
+                </span>
+            </div>
+            <div class="sec-body">
+                <h2 class="rv">It reads a window, not a file.</h2>
+                <p class="lede rv">
+                    Depth sets how many lines per file the model ever sees.
+                    Context is trimmed to fit a 5000 token ceiling, whatever you
+                    ask.
+                </p>
+                <div class="budget rv">
+                    <div class="range-row">
+                        <label for="depth">depth</label>
+                        <input
+                            id="depth"
+                            type="range"
+                            min="1"
+                            max="3"
+                            step="1"
+                            value="2"
+                            aria-valuetext="depth 2"
+                        />
+                        <output id="depth-out" for="depth">
+                            2
+                        </output>
+                    </div>
+                    <div class="meter-label">
+                        <span>lines read from a 400-line file</span>
+                        <span id="lines-out">80 lines</span>
+                    </div>
+                    <div class="strip" id="strip" style="--win:20">
+                        <i></i>
+                    </div>
+                    <div class="meter-label">
+                        <span>tokens per question (target)</span>
+                        <span id="tok-out">~2,000–3,000</span>
+                    </div>
+                    <div class="tok" id="tok" style="--tok:60">
+                        <i></i>
+                        <b title="5000 token hard cap"></b>
+                    </div>
+                    <div class="meter-label">
+                        <span>0</span>
+                        <span style="color:var(--red)">hard cap 5,000</span>
+                    </div>
+                    <div class="readout">
+                        <div>
+                            <b>0</b>
+                            <span>tokens to index</span>
+                        </div>
+                        <div>
+                            <b>0</b>
+                            <span>tokens to repeat a question inside 24h</span>
+                        </div>
+                        <div>
+                            <b>1</b>
+                            <span>model call per question</span>
+                        </div>
+                    </div>
+                    <p class="caption">
+                        Targets come from the build spec, not benchmarks.
+                        Measure yours with <code>quack ask … --json</code>.
                     </p>
-                    <div class="cta-row">
+                </div>
+            </div>
+        </section>
+
+        <section class="sec" id="models">
+            <div class="sec-label">
+                <span class="num">05</span>
+                <span class="tag">models</span>
+                <span class="cap">
+                    Local by default. Remote only when you say so.
+                </span>
+            </div>
+            <div class="sec-body">
+                <h2 class="rv">
+                    Your code stays home until you{" "}
+                    <span class="mark">opt in</span>.
+                </h2>
+                <p class="lede rv">
+                    The default is Gemma 3 through Ollama on localhost. Add a
+                    key to <code>.env</code> and nothing changes. Quack blocks
+                    remote hosts until you run <code>quack init</code>. Click
+                    through it.
+                </p>
+                <div
+                    class="seg rv"
+                    role="group"
+                    aria-label="Where the model runs"
+                >
+                    <button type="button" id="m-local" aria-pressed="true">
+                        Local
+                    </button>
+                    <button type="button" id="m-remote" aria-pressed="false">
+                        Remote
+                    </button>
+                </div>
+                <div class="board rv">
+                    <div>
+                        <p class="chip-h">Local</p>
+                        <ul class="chips" id="chips-local"></ul>
+                        <p class="chip-h">Remote · opt-in</p>
+                        <ul class="chips" id="chips-remote"></ul>
+                        <p class="caption">
+                            Anthropic uses its native API. The rest speak the
+                            OpenAI-compatible protocol, and <code>custom</code>{" "}
+                            takes any endpoint. Add{" "}
+                            <code>--fallback ollama</code> to fall back to local
+                            if a call fails.
+                        </p>
+                    </div>
+                    <div class="wire" aria-live="polite">
+                        <span class="state local" id="w-state">
+                            local
+                        </span>
+                        <div class="msg" id="w-msg"></div>
+                        <button
+                            class="btn"
+                            type="button"
+                            id="w-btn"
+                            hidden
+                        ></button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="sec" id="commands">
+            <div class="sec-label">
+                <span class="num">06</span>
+                <span class="tag">commands</span>
+                <span class="cap">Thirteen, in three groups.</span>
+            </div>
+            <div class="sec-body">
+                <h2 class="rv">Small surface.</h2>
+                <div class="cmds rv" style="margin-top:2rem">
+                    {groups.map((g) => (
+                        <div>
+                            <h3>{g.name}</h3>
+                            <dl>
+                                {g.cmds.map(([cmd, args, desc]) => (
+                                    <div>
+                                        <dt>
+                                            quack {cmd}{" "}
+                                            {args && (
+                                                <span class="arg">{args}</span>
+                                            )}
+                                        </dt>
+                                        <dd>{desc}</dd>
+                                    </div>
+                                ))}
+                            </dl>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </section>
+
+        <section class="sec" id="start">
+            <div class="sec-label">
+                <span class="num">07</span>
+                <span class="tag">start</span>
+                <span class="cap">
+                    Three minutes, offline after the model download.
+                </span>
+            </div>
+            <div class="sec-body">
+                <h2 class="rv">Start with the duck.</h2>
+                <ol class="steps rv" style="margin-top:2rem">
+                    <li>
+                        <b>Install</b>
+                        <p>Python 3.10+.</p>
                         <div class="code">
-                            <code data-copy-text='quack ask "why does login fail?"'>
-                                <span class="p">$ </span>quack ask "why does
-                                login fail?"
+                            <code
+                                data-copy-text={`git clone ${REPO_URL || "<repo-url>"} && cd quack-tutor\npip install -e .`}
+                            >
+                                <span class="p">$ </span>git clone{" "}
+                                {REPO_URL || "<repo-url>"} && cd quack-tutor
+                                {"\n"}
+                                <span class="p">$ </span>pip install -e .
                             </code>
                             <button class="btn" data-copy type="button">
                                 copy
                             </button>
                         </div>
-                        <a class="btn" href="#start">
-                            Get started
-                        </a>
-                    </div>
-                </div>
-                <div class="hero-duck">
-                    <Duck size={290} talk />
-                    <div class="ground"></div>
-                    <p class="hint">click the duck</p>
-                </div>
-                <div class="facts rv">
-                    <div class="fact">
-                        <b>0</b>
-                        <span>
-                            tokens to index your repo. Pure filesystem and
-                            regex.
-                        </span>
-                    </div>
-                    <div class="fact">
-                        <b>3</b>
-                        <span>
-                            places it may write: TASKS.md, QUACK_HISTORY.md and
-                            .quack/
-                        </span>
-                    </div>
-                    <div class="fact">
-                        <b>5000</b>
-                        <span>
-                            token hard cap per question. Repeat questions are
-                            free.
-                        </span>
-                    </div>
-                </div>
-            </section>
-
-            <section class="sec" id="ask">
-                <div class="sec-label">
-                    <span class="num">01</span>
-                    <span class="tag">ask</span>
-                    <span class="cap">
-                        What you get back for one question about a bug.
-                    </span>
-                </div>
-                <div class="sec-body">
-                    <h2 class="rv">
-                        One question, then the <span class="mark">cause</span>.
-                    </h2>
-                    <p class="lede rv">
-                        The duck doesn't hand you a patch. It asks something
-                        specific to your code, tells you where it thinks the bug
-                        is, and leaves you a checklist.
-                    </p>
-                    <div class="ask-grid rv">
-                        <div>
-                            <div class="term" id="term">
-                                <div class="term-bar">
-                                    <span>~/mini_repo</span>
-                                    <button
-                                        type="button"
-                                        id="replay"
-                                        aria-label="Replay the demo"
-                                    >
-                                        replay
-                                    </button>
-                                </div>
-                                <pre><span class="ln" data-r="0"><span class="dim">$ </span><span id="cmd">quack ask "why does session_valid reject valid sessions?"</span></span><span class="ln" data-r="1"> </span><span class="ln" data-r="1"><span class="q">🦆 Quack asks:</span></span><span class="ln" data-r="1"><span class="q">  When is a session supposed to count as valid: before</span></span><span class="ln" data-r="1"><span class="q">  or after its stored expiry time?</span></span><span class="ln" data-r="2"> </span><span class="ln" data-r="2">Quack. session_valid returns True only when the stored</span><span class="ln" data-r="2">expiry is <em style="font-family:inherit;font-size:1em">earlier</em> than now (auth.py:28), so live</span><span class="ln" data-r="2">sessions look expired and dead ones look valid.</span><span class="ln" data-r="3"> </span><span class="ln" data-r="3"><span class="ok">Tasks for you (the duck never edits your code):</span></span><span class="ln" data-r="3"><span class="crit">  [critical]</span> <span class="ok">auth.py:28 - Reverse the comparison in session_valid</span></span><span class="ln" data-r="3"><span class="dim">      why: expiry must be later than the current time.</span></span><span class="ln" data-r="3"><span class="ok">  [suggestion]</span> <span class="ok">auth.py:10 - Compare passwords in constant time</span></span><span class="ln" data-r="4"> </span><span class="ln" data-r="4"><span class="dim">concepts: auth, token-expiry | confidence: high | ollama:gemma3:4b</span></span><span class="ln" data-r="5"> </span><span class="ln" data-r="5"><span class="dim">$ </span>quack verify</span><span class="ln" data-r="5"><span class="ok">PASS: no source files were modified.</span></span></pre>
-                            </div>
-                            <p class="caption">
-                                Illustrative output on the bundled mini_repo.
-                                Run it yourself for real token counts and your
-                                own model's wording.
-                            </p>
+                    </li>
+                    <li>
+                        <b>Get a local model</b>
+                        <p>About 3 GB, once. Then it works offline.</p>
+                        <div class="code">
+                            <code
+                                data-copy-text={
+                                    "ollama pull gemma3:4b\nquack doctor"
+                                }
+                            >
+                                <span class="p">$ </span>ollama pull gemma3:4b
+                                {"\n"}
+                                <span class="p">$ </span>quack doctor
+                            </code>
+                            <button class="btn" data-copy type="button">
+                                copy
+                            </button>
                         </div>
-                        <ol class="callouts" aria-label="What each part means">
-                            <li tabindex="0" data-callout="1">
-                                <b>A Socratic question</b>
-                                <span>
-                                    Exactly one, specific to your code. It makes
-                                    you think before you read the answer.
-                                </span>
-                            </li>
-                            <li tabindex="0" data-callout="2">
-                                <b>The likely cause, with file:line</b>
-                                <span>
-                                    Concrete and capped at 250 words. If it
-                                    can't tell, it says so and asks for another
-                                    file.
-                                </span>
-                            </li>
-                            <li tabindex="0" data-callout="3">
-                                <b>Tasks, ranked</b>
-                                <span>
-                                    Written to TASKS.md as checkboxes, critical
-                                    first. Duplicates are skipped.
-                                </span>
-                            </li>
-                            <li tabindex="0" data-callout="4">
-                                <b>Confidence and cost</b>
-                                <span>
-                                    High, medium or low, plus the model that
-                                    answered. The duck is honest when it's
-                                    unsure.
-                                </span>
-                            </li>
-                        </ol>
-                    </div>
-                </div>
-            </section>
-
-            <section class="sec" id="how">
-                <div class="sec-label">
-                    <span class="num">02</span>
-                    <span class="tag">how</span>
-                    <span class="cap">
-                        The path from your question to TASKS.md.
-                    </span>
-                </div>
-                <div class="sec-body">
-                    <h2 class="rv">Only one step in six uses the model.</h2>
-                    <p class="lede rv">
-                        Everything else is regex, SQLite and arithmetic on your
-                        machine. That's why it's cheap, fast and works offline.
-                    </p>
-                    <div class="pipe" id="pipe">
-                        {steps.map((s) => (
-                            <div class="step">
-                                <h3>
-                                    <small>{s.n}</small>
-                                    {s.name}
-                                </h3>
-                                <p>{s.text}</p>
-                                <span class:list={["cost", { model: s.model }]}>
-                                    {s.cost}
-                                </span>
-                            </div>
-                        ))}
-                    </div>
-                    <p class="pipe-note rv">
-                        Pipe a failing test straight in:{" "}
-                        <code>
-                            pytest -x 2&gt;&amp;1 | quack ask "why?" --stdin
-                        </code>
-                        . Files named in the traceback are read first.
-                    </p>
-                </div>
-            </section>
-
-            <section class="sec" id="read-only">
-                <div class="sec-label">
-                    <span class="num">03</span>
-                    <span class="tag">read-only</span>
-                    <span class="cap">Not a promise. A check in the code.</span>
-                </div>
-                <div class="sec-body">
-                    <h2 class="rv">
-                        Ask the duck to <span class="mark">edit</span> a file.
-                    </h2>
-                    <p class="lede rv">
-                        Every write goes through one function. It allows{" "}
-                        <code>TASKS.md</code>, <code>QUACK_HISTORY.md</code> and
-                        anything under <code>.quack/</code>. Nothing else. Try
-                        it, this runs the same rule.
-                    </p>
-                    <div class="deny rv">
-                        <div>
-                            <ul class="files" id="files">
-                                <li>
-                                    <button
-                                        type="button"
-                                        data-path="auth.py"
-                                        aria-pressed="false"
-                                    >
-                                        auth.py <small>source</small>
-                                    </button>
-                                </li>
-                                <li>
-                                    <button
-                                        type="button"
-                                        data-path="api.py"
-                                        aria-pressed="false"
-                                    >
-                                        api.py <small>source</small>
-                                    </button>
-                                </li>
-                                <li>
-                                    <button
-                                        type="button"
-                                        data-path="README.md"
-                                        aria-pressed="false"
-                                    >
-                                        README.md <small>docs</small>
-                                    </button>
-                                </li>
-                                <li>
-                                    <button
-                                        type="button"
-                                        data-path="TASKS.md"
-                                        aria-pressed="false"
-                                    >
-                                        TASKS.md <small>generated</small>
-                                    </button>
-                                </li>
-                                <li>
-                                    <button
-                                        type="button"
-                                        data-path=".quack/index.db"
-                                        aria-pressed="false"
-                                    >
-                                        .quack/index.db <small>generated</small>
-                                    </button>
-                                </li>
-                            </ul>
-                            <form class="try" id="try" autocomplete="off">
-                                <label
-                                    class="muted mono"
-                                    for="path"
-                                    style="position:absolute;left:-999px"
-                                >
-                                    File path to try
-                                </label>
-                                <input
-                                    id="path"
-                                    name="path"
-                                    placeholder="or type any path…"
-                                    spellcheck="false"
-                                />
-                                <button class="btn" type="submit">
-                                    try
-                                </button>
-                            </form>
-                        </div>
-                        <div class="verdict" aria-live="polite">
-                            <div class="out" id="verdict-out">
-                                <span class="dim">
-                                    Pick a file. The duck will try to write to
-                                    it.
-                                </span>
-                            </div>
-                            <div class="verdict-foot">
-                                <span class="dim">
-                                    quack.safety.assert_writable(path)
-                                </span>
-                                <Duck
-                                    size={84}
-                                    id="deny-duck"
-                                    label="The duck reacting to the write attempt"
-                                />
-                            </div>
-                        </div>
-                    </div>
-                    <div class="writable rv" aria-label="Writable paths">
-                        <span>TASKS.md</span>
-                        <span>QUACK_HISTORY.md</span>
-                        <span>.quack/**</span>
-                    </div>
-                    <p class="caption rv">
-                        After any command, <code>quack verify</code> checks git
-                        status (or file hashes without git) and exits 1 on any
-                        drift. <code>quack verify --audit</code> lists every
-                        write site in the package.
-                    </p>
-                </div>
-            </section>
-
-            <section class="sec" id="budget">
-                <div class="sec-label">
-                    <span class="num">04</span>
-                    <span class="tag">budget</span>
-                    <span class="cap">
-                        Slow and steady: spend tokens like a sloth.
-                    </span>
-                </div>
-                <div class="sec-body">
-                    <h2 class="rv">It reads a window, not a file.</h2>
-                    <p class="lede rv">
-                        Depth sets how many lines per file the model ever sees.
-                        Context is trimmed to fit a 5000 token ceiling, whatever
-                        you ask.
-                    </p>
-                    <div class="budget rv">
-                        <div class="range-row">
-                            <label for="depth">depth</label>
-                            <input
-                                id="depth"
-                                type="range"
-                                min="1"
-                                max="3"
-                                step="1"
-                                value="2"
-                                aria-valuetext="depth 2"
-                            />
-                            <output id="depth-out" for="depth">
-                                2
-                            </output>
-                        </div>
-                        <div class="meter-label">
-                            <span>lines read from a 400-line file</span>
-                            <span id="lines-out">80 lines</span>
-                        </div>
-                        <div class="strip" id="strip" style="--win:20">
-                            <i></i>
-                        </div>
-                        <div class="meter-label">
-                            <span>tokens per question (target)</span>
-                            <span id="tok-out">~2,000–3,000</span>
-                        </div>
-                        <div class="tok" id="tok" style="--tok:60">
-                            <i></i>
-                            <b title="5000 token hard cap"></b>
-                        </div>
-                        <div class="meter-label">
-                            <span>0</span>
-                            <span style="color:var(--red)">hard cap 5,000</span>
-                        </div>
-                        <div class="readout">
-                            <div>
-                                <b>0</b>
-                                <span>tokens to index</span>
-                            </div>
-                            <div>
-                                <b>0</b>
-                                <span>
-                                    tokens to repeat a question inside 24h
-                                </span>
-                            </div>
-                            <div>
-                                <b>1</b>
-                                <span>model call per question</span>
-                            </div>
-                        </div>
-                        <p class="caption">
-                            Targets come from the build spec, not benchmarks.
-                            Measure yours with <code>quack ask … --json</code>.
+                    </li>
+                    <li>
+                        <b>Ask</b>
+                        <p>
+                            Inside any project. Then run{" "}
+                            <code>quack verify</code>.
                         </p>
-                    </div>
-                </div>
-            </section>
-
-            <section class="sec" id="models">
-                <div class="sec-label">
-                    <span class="num">05</span>
-                    <span class="tag">models</span>
-                    <span class="cap">
-                        Local by default. Remote only when you say so.
-                    </span>
-                </div>
-                <div class="sec-body">
-                    <h2 class="rv">
-                        Your code stays home until you{" "}
-                        <span class="mark">opt in</span>.
-                    </h2>
-                    <p class="lede rv">
-                        The default is Gemma 3 through Ollama on localhost. Add
-                        a key to <code>.env</code> and nothing changes. Quack
-                        blocks remote hosts until you run{" "}
-                        <code>quack init</code>. Click through it.
-                    </p>
-                    <div
-                        class="seg rv"
-                        role="group"
-                        aria-label="Where the model runs"
-                    >
-                        <button type="button" id="m-local" aria-pressed="true">
-                            Local
-                        </button>
-                        <button
-                            type="button"
-                            id="m-remote"
-                            aria-pressed="false"
-                        >
-                            Remote
-                        </button>
-                    </div>
-                    <div class="board rv">
-                        <div>
-                            <p class="chip-h">Local</p>
-                            <ul class="chips" id="chips-local"></ul>
-                            <p class="chip-h">Remote · opt-in</p>
-                            <ul class="chips" id="chips-remote"></ul>
-                            <p class="caption">
-                                Anthropic uses its native API. The rest speak
-                                the OpenAI-compatible protocol, and{" "}
-                                <code>custom</code> takes any endpoint. Add{" "}
-                                <code>--fallback ollama</code> to fall back to
-                                local if a call fails.
-                            </p>
+                        <div class="code">
+                            <code
+                                data-copy-text={
+                                    'quack ask "why does login fail?"\nquack verify'
+                                }
+                            >
+                                <span class="p">$ </span>quack ask "why does
+                                login fail?"{"\n"}
+                                <span class="p">$ </span>quack verify
+                            </code>
+                            <button class="btn" data-copy type="button">
+                                copy
+                            </button>
                         </div>
-                        <div class="wire" aria-live="polite">
-                            <span class="state local" id="w-state">
-                                local
-                            </span>
-                            <div class="msg" id="w-msg"></div>
-                            <button
-                                class="btn"
-                                type="button"
-                                id="w-btn"
-                                hidden
-                            ></button>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            <section class="sec" id="commands">
-                <div class="sec-label">
-                    <span class="num">06</span>
-                    <span class="tag">commands</span>
-                    <span class="cap">Thirteen, in three groups.</span>
-                </div>
-                <div class="sec-body">
-                    <h2 class="rv">Small surface.</h2>
-                    <div class="cmds rv" style="margin-top:2rem">
-                        {groups.map((g) => (
-                            <div>
-                                <h3>{g.name}</h3>
-                                <dl>
-                                    {g.cmds.map(([cmd, args, desc]) => (
-                                        <div>
-                                            <dt>
-                                                quack {cmd}{" "}
-                                                {args && (
-                                                    <span class="arg">
-                                                        {args}
-                                                    </span>
-                                                )}
-                                            </dt>
-                                            <dd>{desc}</dd>
-                                        </div>
-                                    ))}
-                                </dl>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            </section>
-
-            <section class="sec" id="start">
-                <div class="sec-label">
-                    <span class="num">07</span>
-                    <span class="tag">start</span>
-                    <span class="cap">
-                        Three minutes, offline after the model download.
-                    </span>
-                </div>
-                <div class="sec-body">
-                    <h2 class="rv">Start with the duck.</h2>
-                    <ol class="steps rv" style="margin-top:2rem">
-                        <li>
-                            <b>Install</b>
-                            <p>Python 3.10+.</p>
-                            <div class="code">
-                                <code
-                                    data-copy-text={`git clone ${REPO_URL || "<repo-url>"} && cd quack-tutor\npip install -e .`}
-                                >
-                                    <span class="p">$ </span>git clone{" "}
-                                    {REPO_URL || "<repo-url>"} && cd quack-tutor
-                                    {"\n"}
-                                    <span class="p">$ </span>pip install -e .
-                                </code>
-                                <button class="btn" data-copy type="button">
-                                    copy
-                                </button>
-                            </div>
-                        </li>
-                        <li>
-                            <b>Get a local model</b>
-                            <p>About 3 GB, once. Then it works offline.</p>
-                            <div class="code">
-                                <code
-                                    data-copy-text={
-                                        "ollama pull gemma3:4b\nquack doctor"
-                                    }
-                                >
-                                    <span class="p">$ </span>ollama pull
-                                    gemma3:4b{"\n"}
-                                    <span class="p">$ </span>quack doctor
-                                </code>
-                                <button class="btn" data-copy type="button">
-                                    copy
-                                </button>
-                            </div>
-                        </li>
-                        <li>
-                            <b>Ask</b>
-                            <p>
-                                Inside any project. Then run{" "}
-                                <code>quack verify</code>.
-                            </p>
-                            <div class="code">
-                                <code
-                                    data-copy-text={
-                                        'quack ask "why does login fail?"\nquack verify'
-                                    }
-                                >
-                                    <span class="p">$ </span>quack ask "why does
-                                    login fail?"{"\n"}
-                                    <span class="p">$ </span>quack verify
-                                </code>
-                                <button class="btn" data-copy type="button">
-                                    copy
-                                </button>
-                            </div>
-                        </li>
-                    </ol>
-                </div>
-            </section>
-        </main>
-
-        <footer>
-            <div>
-                <p>
-                    Quack v{VERSION} · MIT licensed. Built for the Hacktoberfest
-                    Open-Source AI Challenge, Week 3: Slow and Steady.
-                </p>
-                <p>The duck never modifies your code.</p>
-                <div class="links">
-                    {REPO_URL && <a href={REPO_URL}>source</a>}
-                    <a href="#top">back to top</a>
-                </div>
+                    </li>
+                </ol>
             </div>
-            <Duck size={110} mood="happy" talk />
-        </footer>
-    </div>
+        </section>
+    </main>
+
+    <Footer VERSION={VERSION} REPO_URL={REPO_URL} />
 </Base>

@@ -1,7 +1,9 @@
-# 🦆 Quack, the rubber duck tutor
+# 🦆 [Quack, the rubber duck tutor](https://quack.wasmer.app/)
 
 <p align="center">
-  <img src="assets/quack.svg" alt="Quack logo" width="120" />
+  <a href="https://quack.wasmer.app/">
+    <img src="assets/quack.svg" alt="Quack logo" width="120" />
+  </a>
 </p>
 
 **The AI coding assistant that can't touch your code.**
@@ -11,10 +13,14 @@ Quack indexes your repo (zero LLM tokens), retrieves only the few files that mat
 fix. It never edits source files. It is read-only by construction and can prove it (`quack verify`).
 
 <p align="center">
-  <img src="assets/quack_web.png" alt="Quack Web" width="500" />
+  <a href="https://quack.wasmer.app/">
+    <img src="assets/quack_web.png" alt="Quack Web" width="500" />
+  </a>
 </p>
 
 Built for "Slow and Steady" challenge: the duck conserves tokens, moves deliberately, and lets you do the fix at your own pace.
+
+**Try Quack:** https://quack.wasmer.app/
 
 ## Why open models
 

@@ -10,8 +10,11 @@ Quack indexes your repo (zero LLM tokens), retrieves only the few files that mat
 **one Socratic question**, explains the likely cause of a bug, and writes a `TASKS.md` for _you_ to
 fix. It never edits source files. It is read-only by construction and can prove it (`quack verify`).
 
-Built for the Hacktoberfest "Slow and Steady" challenge: the duck conserves tokens, moves
-deliberately, and lets you do the fix at your own pace.
+<p align="center">
+  <img src="assets/quack_web.png" alt="Quack Web" width="500" />
+</p>
+
+Built for "Slow and Steady" challenge: the duck conserves tokens, moves deliberately, and lets you do the fix at your own pace.
 
 ## Why open models
 
